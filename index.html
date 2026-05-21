@@ -2,40 +2,202 @@
 <html>
 <head>
   <title>Discipline Check-in</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #eef2ff, #f8fafc);
+      color: #1f2937;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+      background: white;
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 8px;
+      font-size: 28px;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #6b7280;
+      margin-bottom: 24px;
+    }
+
+    .status {
+      text-align: center;
+      font-size: 14px;
+      color: #2563eb;
+      background: #eff6ff;
+      padding: 10px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .info-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #374151;
+    }
+
+    .checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      padding: 14px;
+      border-radius: 14px;
+      cursor: pointer;
+    }
+
+    input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .primary-btn {
+      background: #2563eb;
+      color: white;
+    }
+
+    .primary-btn:hover {
+      background: #1d4ed8;
+    }
+
+    .danger-btn {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .danger-btn:hover {
+      background: #fecaca;
+    }
+
+    .footer-note {
+      text-align: center;
+      margin-top: 18px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+  </style>
 </head>
+
 <body>
-  <h1>Daily Discipline Check-in</h1>
+  <div class="container">
+    <h1>Daily Discipline Check-in</h1>
+    <p class="subtitle">Small rules. Daily progress.</p>
 
-  <p id="status">Loading Firebase...</p>
+    <p id="status" class="status">Loading Firebase...</p>
 
-  <p id="streak">Current streak: 0 days</p>
-  <p id="bestStreak">Best streak: 0 days</p>
-  <p id="lastCheckIn">Last check-in: none</p>
-  <p id="countdown">Time left before streak reset: loading...</p>
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">Current Streak</div>
+        <div id="streak" class="stat-value">0 days</div>
+      </div>
 
-  <label>
-    <input type="checkbox" id="work">
-    I worked/studied today
-  </label>
-  <br>
+      <div class="stat-card">
+        <div class="stat-label">Best Streak</div>
+        <div id="bestStreak" class="stat-value">0 days</div>
+      </div>
+    </div>
 
-  <label>
-    <input type="checkbox" id="noChinese">
-    I did not watch Chinese content
-  </label>
-  <br>
+    <div class="info-card">
+      <p id="lastCheckIn">Last check-in: none</p>
+      <p id="countdown">Time left before streak reset: loading...</p>
+    </div>
 
-  <label>
-    <input type="checkbox" id="english">
-    I stayed mostly in an English environment
-  </label>
-  <br><br>
+    <div class="checklist">
+      <label>
+        <input type="checkbox" id="work">
+        I worked/studied today
+      </label>
 
-  <button onclick="checkIn()">Check in today</button>
+      <label>
+        <input type="checkbox" id="noChinese">
+        I did not watch Chinese content
+      </label>
 
-  <br><br>
+      <label>
+        <input type="checkbox" id="english">
+        I stayed mostly in an English environment
+      </label>
+    </div>
 
-  <button onclick="resetProgress()">Reset / Fresh Start</button>
+    <button class="primary-btn" onclick="checkIn()">Check in today</button>
+
+    <button class="danger-btn" onclick="resetProgress()">Reset / Fresh Start</button>
+
+    <p class="footer-note">Deadline: 12:30 AM every day</p>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
@@ -122,10 +284,10 @@
 
     function updateUI() {
       document.getElementById("streak").textContent =
-        "Current streak: " + currentStreak + " days";
+        currentStreak + " days";
 
       document.getElementById("bestStreak").textContent =
-        "Best streak: " + bestStreak + " days";
+        bestStreak + " days";
 
       document.getElementById("lastCheckIn").textContent =
         "Last check-in: " + (lastCheckIn || "none");
