@@ -32,6 +32,10 @@
 
   <button onclick="checkIn()">Check in today</button>
 
+  <br><br>
+
+  <button onclick="resetProgress()">Reset / Fresh Start</button>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
 
@@ -67,14 +71,26 @@
     let bestStreak = 0;
     let lastCheckIn = null;
 
-    function getToday() {
-      return new Date().toISOString().split("T")[0];
+    function getLocalDateString(date = new Date()) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return year + "-" + month + "-" + day;
     }
 
-    function getYesterday() {
+    function getYesterdayString() {
       const date = new Date();
       date.setDate(date.getDate() - 1);
-      return date.toISOString().split("T")[0];
+      return getLocalDateString(date);
+    }
+
+    function isAfterTodayDeadline() {
+      const now = new Date();
+      const deadline = new Date();
+
+      deadline.setHours(0, 30, 0, 0);
+
+      return now > deadline;
     }
 
     function updateUI() {
@@ -88,6 +104,32 @@
         "Last check-in: " + (lastCheckIn || "none");
     }
 
+    async function saveUserData() {
+      await setDoc(doc(db, "users", userId), {
+        currentStreak: currentStreak,
+        bestStreak: bestStreak,
+        lastCheckIn: lastCheckIn
+      }, { merge: true });
+    }
+
+    async function applyMissedCheckInRule() {
+      const today = getLocalDateString();
+      const yesterday = getYesterdayString();
+
+      if (lastCheckIn === today) {
+        return;
+      }
+
+      if (lastCheckIn === yesterday && !isAfterTodayDeadline()) {
+        return;
+      }
+
+      if (currentStreak !== 0) {
+        currentStreak = 0;
+        await saveUserData();
+      }
+    }
+
     async function loadUserData() {
       const userRef = doc(db, "users", userId);
       const userSnap = await getDoc(userRef);
@@ -99,12 +141,14 @@
         bestStreak = data.bestStreak || 0;
         lastCheckIn = data.lastCheckIn || null;
       } else {
-        await setDoc(userRef, {
-          currentStreak: 0,
-          bestStreak: 0,
-          lastCheckIn: null
-        });
+        currentStreak = 0;
+        bestStreak = 0;
+        lastCheckIn = null;
+
+        await saveUserData();
       }
+
+      await applyMissedCheckInRule();
 
       updateUI();
 
@@ -127,8 +171,8 @@
         return;
       }
 
-      const today = getToday();
-      const yesterday = getYesterday();
+      const today = getLocalDateString();
+      const yesterday = getYesterdayString();
 
       if (lastCheckIn === today) {
         alert("You already checked in today.");
@@ -147,11 +191,7 @@
 
       lastCheckIn = today;
 
-      await setDoc(doc(db, "users", userId), {
-        currentStreak: currentStreak,
-        bestStreak: bestStreak,
-        lastCheckIn: lastCheckIn
-      });
+      await saveUserData();
 
       await setDoc(doc(db, "checkins", userId + "_" + today), {
         userId: userId,
@@ -159,7 +199,8 @@
         work: work,
         noChinese: noChinese,
         english: english,
-        success: true
+        success: true,
+        createdAt: new Date().toISOString()
       });
 
       updateUI();
@@ -167,7 +208,38 @@
       alert("Checked in successfully!");
     }
 
+    async function resetProgress() {
+      if (!userId) {
+        alert("Firebase is still loading. Try again in a few seconds.");
+        return;
+      }
+
+      const confirmReset = confirm(
+        "Are you sure you want to reset your current progress? This will not delete old database records."
+      );
+
+      if (!confirmReset) {
+        return;
+      }
+
+      currentStreak = 0;
+      lastCheckIn = null;
+
+      await saveUserData();
+
+      await setDoc(doc(db, "resets", userId + "_" + new Date().toISOString()), {
+        userId: userId,
+        resetAt: new Date().toISOString(),
+        note: "User started fresh. Old check-in records were not deleted."
+      });
+
+      updateUI();
+
+      alert("Progress reset. You can start fresh now.");
+    }
+
     window.checkIn = checkIn;
+    window.resetProgress = resetProgress;
 
     signInAnonymously(auth)
       .catch((error) => {
