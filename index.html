@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Discipline Check-in</title>
+</head>
+<body>
+  <h1>Daily Discipline Check-in</h1>
+
+  <p id="streak">Current streak: 0 days</p>
+
+  <label>
+    <input type="checkbox" id="work">
+    I worked/studied today
+  </label>
+  <br>
+
+  <label>
+    <input type="checkbox" id="noChinese">
+    I did not watch Chinese content
+  </label>
+  <br>
+
+  <label>
+    <input type="checkbox" id="english">
+    I stayed in an English environment
+  </label>
+  <br><br>
+
+  <button onclick="checkIn()">Check in today</button>
+
+  <script>
+    let streak = Number(localStorage.getItem("streak")) || 0;
+    let lastCheckIn = localStorage.getItem("lastCheckIn");
+
+    document.getElementById("streak").textContent =
+      "Current streak: " + streak + " days";
+
+    function getToday() {
+      return new Date().toISOString().split("T")[0];
+    }
+
+    function checkIn() {
+      const work = document.getElementById("work").checked;
+      const noChinese = document.getElementById("noChinese").checked;
+      const english = document.getElementById("english").checked;
+
+      if (!work || !noChinese || !english) {
+        alert("You need to complete all rules before checking in.");
+        return;
+      }
+
+      const today = getToday();
+
+      if (lastCheckIn === today) {
+        alert("You already checked in today.");
+        return;
+      }
+
+      streak++;
+      localStorage.setItem("streak", streak);
+      localStorage.setItem("lastCheckIn", today);
+
+      document.getElementById("streak").textContent =
+        "Current streak: " + streak + " days";
+
+      alert("Checked in successfully!");
+    }
+  </script>
+</body>
+</html>
