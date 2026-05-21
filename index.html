@@ -88,14 +88,6 @@
     function isAfterTodayDeadline() {
       const now = new Date();
       const deadline = new Date();
-
-      deadline.setHours(0, 30, 0, 0);
-
-      return now > deadline;
-    }
-    function isAfterTodayDeadline() {
-      const now = new Date();
-      const deadline = new Date();
       deadline.setHours(0, 30, 0, 0);
       return now > deadline;
     }
@@ -103,21 +95,26 @@
     function getNextDeadline() {
       const now = new Date();
       const deadline = new Date();
+
       deadline.setHours(0, 30, 0, 0);
+
       if (now > deadline) {
         deadline.setDate(deadline.getDate() + 1);
       }
+
       return deadline;
     }
-    
+
     function updateCountdown() {
       const now = new Date();
       const deadline = getNextDeadline();
+
       const diff = deadline - now;
+
       const hours = Math.floor(diff / (1000 * 60 * 60));
       const minutes = Math.floor((diff / (1000 * 60)) % 60);
       const seconds = Math.floor((diff / 1000) % 60);
-      
+
       document.getElementById("countdown").textContent =
         "Time left before streak reset: " +
         hours + "h " + minutes + "m " + seconds + "s";
@@ -270,6 +267,7 @@
 
     window.checkIn = checkIn;
     window.resetProgress = resetProgress;
+
     updateCountdown();
     setInterval(updateCountdown, 1000);
 
