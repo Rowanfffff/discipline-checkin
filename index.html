@@ -1,70 +1,133 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Discipline Check-in</title>
-</head>
-<body>
-  <h1>Daily Discipline Check-in</h1>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+  import {
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc
+  } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-  <p id="streak">Current streak: 0 days</p>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA-Edt2MC8yZiHI_WRQKte5VEncEUIP1L4",
+    authDomain: "daily-check-in-86968.firebaseapp.com",
+    projectId: "daily-check-in-86968",
+    storageBucket: "daily-check-in-86968.firebasestorage.app",
+    messagingSenderId: "1063521708690",
+    appId: "1:1063521708690:web:1bad506bb31982d0a2d44b",
+    measurementId: "G-55SNKVD5B7"
+  };
 
-  <label>
-    <input type="checkbox" id="work">
-    I worked/studied today
-  </label>
-  <br>
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
 
-  <label>
-    <input type="checkbox" id="noChinese">
-    I did not watch Chinese content
-  </label>
-  <br>
+  let userId = null;
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let lastCheckIn = null;
 
-  <label>
-    <input type="checkbox" id="english">
-    I stayed in an English environment
-  </label>
-  <br><br>
+  function getToday() {
+    return new Date().toISOString().split("T")[0];
+  }
 
-  <button onclick="checkIn()">Check in today</button>
+  function getYesterday() {
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
+    return date.toISOString().split("T")[0];
+  }
 
-  <script>
-    let streak = Number(localStorage.getItem("streak")) || 0;
-    let lastCheckIn = localStorage.getItem("lastCheckIn");
-
+  function updateUI() {
     document.getElementById("streak").textContent =
-      "Current streak: " + streak + " days";
+      "Current streak: " + currentStreak + " days";
 
-    function getToday() {
-      return new Date().toISOString().split("T")[0];
+    document.getElementById("bestStreak").textContent =
+      "Best streak: " + bestStreak + " days";
+  }
+
+  async function loadUserData() {
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+
+      currentStreak = data.currentStreak || 0;
+      bestStreak = data.bestStreak || 0;
+      lastCheckIn = data.lastCheckIn || null;
+    } else {
+      await setDoc(userRef, {
+        currentStreak: 0,
+        bestStreak: 0,
+        lastCheckIn: null
+      });
     }
 
-    function checkIn() {
-      const work = document.getElementById("work").checked;
-      const noChinese = document.getElementById("noChinese").checked;
-      const english = document.getElementById("english").checked;
+    updateUI();
+  }
 
-      if (!work || !noChinese || !english) {
-        alert("You need to complete all rules before checking in.");
-        return;
-      }
+  async function checkIn() {
+    const work = document.getElementById("work").checked;
+    const noChinese = document.getElementById("noChinese").checked;
+    const english = document.getElementById("english").checked;
 
-      const today = getToday();
-
-      if (lastCheckIn === today) {
-        alert("You already checked in today.");
-        return;
-      }
-
-      streak++;
-      localStorage.setItem("streak", streak);
-      localStorage.setItem("lastCheckIn", today);
-
-      document.getElementById("streak").textContent =
-        "Current streak: " + streak + " days";
-
-      alert("Checked in successfully!");
+    if (!work || !noChinese || !english) {
+      alert("You need to complete all rules before checking in.");
+      return;
     }
-  </script>
-</body>
-</html>
+
+    if (!userId) {
+      alert("Firebase is still loading. Try again in a few seconds.");
+      return;
+    }
+
+    const today = getToday();
+    const yesterday = getYesterday();
+
+    if (lastCheckIn === today) {
+      alert("You already checked in today.");
+      return;
+    }
+
+    if (lastCheckIn === yesterday) {
+      currentStreak++;
+    } else {
+      currentStreak = 1;
+    }
+
+    if (currentStreak > bestStreak) {
+      bestStreak = currentStreak;
+    }
+
+    lastCheckIn = today;
+
+    await setDoc(doc(db, "users", userId), {
+      currentStreak: currentStreak,
+      bestStreak: bestStreak,
+      lastCheckIn: lastCheckIn
+    });
+
+    await setDoc(doc(db, "checkins", userId + "_" + today), {
+      userId: userId,
+      date: today,
+      work: work,
+      noChinese: noChinese,
+      english: english,
+      success: true
+    });
+
+    updateUI();
+    alert("Checked in successfully!");
+  }
+
+  window.checkIn = checkIn;
+
+  signInAnonymously(auth);
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      userId = user.uid;
+      await loadUserData();
+    }
+  });
+</script>
