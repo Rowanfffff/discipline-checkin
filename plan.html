@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Task Plan | Discipline Compass</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    * { box-sizing: border-box; }
+
+    :root {
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --line: #e2e8f0;
+      --brand: #2563eb;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(1200px 700px at 0% -10%, #e0e7ff 0%, var(--bg) 42%, var(--bg) 100%);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 700px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 24px;
+      padding: 28px 24px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+    }
+
+    h1 { margin: 0 0 6px; font-size: 30px; text-align: center; }
+    .subtitle { text-align: center; color: var(--text-muted); margin-bottom: 16px; font-size: 14px; }
+
+    .status {
+      text-align: center;
+      font-size: 14px;
+      color: #1e40af;
+      background: linear-gradient(180deg, #eff6ff, #e0ecff);
+      border: 1px solid #bfdbfe;
+      padding: 10px 12px;
+      border-radius: 14px;
+      margin-bottom: 16px;
+    }
+
+    .nav-link {
+      display: block;
+      text-align: center;
+      margin-bottom: 16px;
+      color: #1d4ed8;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .auth-card, .review-card {
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+
+    .auth-input {
+      width: 100%;
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: var(--surface);
+    }
+
+    .auth-row { display: flex; gap: 8px; margin-top: 10px; }
+    .auth-row button { margin-top: 0; flex: 1; }
+
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .primary-btn { background: linear-gradient(180deg, #3b82f6, var(--brand)); color: white; }
+    .secondary-btn { background: #f8fafc; color: #0f172a; border: 1px solid var(--line); }
+
+    .helper-text { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); }
+    #planStatus.error { color: #b91c1c; }
+
+    .plan-add-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+    .plan-add-row input[type="text"] { flex: 1; margin-top: 0; }
+    .plan-important-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; }
+
+    .plan-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .plan-item {
+      display: flex; align-items: center; gap: 10px;
+      background: white; border: 1px solid var(--line); border-radius: 14px;
+      padding: 12px; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+    }
+    .plan-item.important { border-color: #93c5fd; background: linear-gradient(180deg, #eff6ff, #fff); }
+    .plan-item.done .plan-card-text { text-decoration: line-through; color: var(--text-muted); }
+    .plan-card-text { flex: 1; line-height: 1.4; }
+    .plan-move-btns { display: flex; flex-direction: column; gap: 4px; }
+    .plan-move-btns button { margin-top: 0; width: 34px; padding: 4px 0; font-size: 12px; }
+    .plan-badge { font-size: 11px; font-weight: 700; color: #1e40af; background: #dbeafe; border-radius: 999px; padding: 2px 8px; }
+    .mini-btn { border: 1px solid var(--line); background: white; border-radius: 10px; font-size: 12px; padding: 6px 10px; cursor: pointer; width: auto; margin-top: 0; }
+    .mini-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .history-empty { font-size: 14px; color: var(--text-muted); margin: 0; }
+    .section-title { margin: 0 0 10px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Task Plan</h1>
+    <p class="subtitle">Plan cards with important-first ordering</p>
+
+    <a class="nav-link" href="index.html">← Back to Check-in</a>
+
+    <p id="status" class="status">Loading Firebase...</p>
+
+    <div class="auth-card">
+      <p id="authInfo">Sign in status: loading...</p>
+      <input id="emailInput" class="auth-input" type="email" placeholder="Email">
+      <input id="passwordInput" class="auth-input" type="password" placeholder="Password">
+      <p class="helper-text">Use the same account as the main check-in page.</p>
+      <div class="auth-row">
+        <button class="secondary-btn" type="button" onclick="signUpWithEmail()">Sign up</button>
+        <button class="secondary-btn" type="button" onclick="signInWithEmail()">Sign in</button>
+        <button class="secondary-btn" type="button" onclick="signOutUser()">Sign out</button>
+      </div>
+    </div>
+
+    <div class="review-card">
+      <h2 class="section-title">Task cards</h2>
+      <p id="planStatus" class="helper-text">Add cards anytime. They save to cloud and stay after refresh.</p>
+      <div class="plan-add-row">
+        <input id="planCardText" class="auth-input" type="text" placeholder="New task card">
+        <label class="plan-important-label">
+          <input id="planCardImportant" type="checkbox">
+          Important
+        </label>
+      </div>
+      <button class="secondary-btn" type="button" onclick="addPlanCard()">Add card</button>
+      <ul id="planBoardList" class="plan-list"></ul>
+      <button class="secondary-btn" type="button" onclick="shufflePlanBoard()">Shuffle (important first)</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signOut,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword
+    } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA-Edt2MC8yZiHI_WRQKte5VEncEUIP1L4",
+      authDomain: "daily-check-in-86968.firebaseapp.com",
+      projectId: "daily-check-in-86968",
+      storageBucket: "daily-check-in-86968.firebasestorage.app",
+      messagingSenderId: "1063521708690",
+      appId: "1:1063521708690:web:1bad506bb31982d0a2d44b",
+      measurementId: "G-55SNKVD5B7"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let userId = null;
+    let planBoardItems = [];
+    const PLAN_BOARD_ID = "board";
+
+    function getLocalDateString(date = new Date()) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return year + "-" + month + "-" + day;
+    }
+
+    function getDateAtDayOffset(baseDate, offsetDays) {
+      const date = new Date(baseDate);
+      date.setDate(date.getDate() + offsetDays);
+      return getLocalDateString(date);
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setPlanStatus(message, isError) {
+      const el = document.getElementById("planStatus");
+      el.textContent = message;
+      el.classList.toggle("error", !!isError);
+    }
+
+    function setActionAvailability(isSignedIn) {
+      const disabled = !isSignedIn;
+      document.getElementById("planCardText").disabled = disabled;
+      document.getElementById("planCardImportant").disabled = disabled;
+    }
+
+    function createPlanItemId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    function sortPlanItems(items) {
+      return [...items].sort((a, b) => a.order - b.order);
+    }
+
+    function shuffleArray(array) {
+      const copy = [...array];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function shufflePlanItems(items) {
+      const importantItems = sortPlanItems(items.filter((item) => item.important));
+      const normalItems = shuffleArray(items.filter((item) => !item.important));
+      return [...importantItems, ...normalItems].map((item, index) => ({ ...item, order: index }));
+    }
+
+    async function loadPlanDoc(docSuffix) {
+      const planSnap = await getDoc(doc(db, "plans", userId + "_" + docSuffix));
+      if (!planSnap.exists()) return [];
+      return sortPlanItems(planSnap.data().items || []);
+    }
+
+    async function savePlanBoard() {
+      await setDoc(doc(db, "plans", userId + "_" + PLAN_BOARD_ID), {
+        userId: userId,
+        boardType: "active",
+        items: planBoardItems,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      setPlanStatus("Saved to cloud. Last update: " + new Date().toLocaleTimeString(), false);
+    }
+
+    async function migrateOldPlansIfNeeded() {
+      if (planBoardItems.length) return;
+      try {
+        const today = getLocalDateString();
+        const tomorrow = getDateAtDayOffset(new Date(), 1);
+        const merged = [...await loadPlanDoc(today), ...await loadPlanDoc(tomorrow)];
+        if (!merged.length) return;
+        const seen = new Set();
+        planBoardItems = merged.filter((item) => {
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        }).map((item, index) => ({ ...item, order: index }));
+        await savePlanBoard();
+      } catch (error) {
+        console.warn("Plan migration skipped:", error);
+      }
+    }
+
+    function renderPlanBoard() {
+      const container = document.getElementById("planBoardList");
+      if (!planBoardItems.length) {
+        container.innerHTML = "<p class=\"history-empty\">No cards yet. Add your first task card above.</p>";
+        return;
+      }
+      const sorted = sortPlanItems(planBoardItems);
+      container.innerHTML = sorted.map((item, index) => {
+        const upDisabled = index === 0 ? " disabled" : "";
+        const downDisabled = index === sorted.length - 1 ? " disabled" : "";
+        return (
+          "<li class=\"plan-item" + (item.important ? " important" : "") + (item.done ? " done" : "") + "\">" +
+          "<div class=\"plan-move-btns\">" +
+          "<button class=\"mini-btn\" type=\"button\"" + upDisabled + " onclick=\"movePlanCard('" + item.id + "', -1)\">↑</button>" +
+          "<button class=\"mini-btn\" type=\"button\"" + downDisabled + " onclick=\"movePlanCard('" + item.id + "', 1)\">↓</button>" +
+          "</div>" +
+          "<input type=\"checkbox\" " + (item.done ? "checked" : "") + " onchange=\"togglePlanCardDone('" + item.id + "')\">" +
+          "<span class=\"plan-badge\" style=\"background:#f1f5f9;color:#475569;\">#" + (index + 1) + "</span>" +
+          (item.important ? "<span class=\"plan-badge\">Important</span>" : "") +
+          "<span class=\"plan-card-text\">" + escapeHtml(item.text) + "</span>" +
+          "<button class=\"mini-btn\" type=\"button\" onclick=\"removePlanCard('" + item.id + "')\">Remove</button>" +
+          "</li>"
+        );
+      }).join("");
+    }
+
+    async function loadPlans() {
+      if (!userId) {
+        planBoardItems = [];
+        renderPlanBoard();
+        setPlanStatus("Sign in to use task cards.", false);
+        return;
+      }
+      try {
+        planBoardItems = await loadPlanDoc(PLAN_BOARD_ID);
+        await migrateOldPlansIfNeeded();
+        renderPlanBoard();
+        setPlanStatus("Loaded " + planBoardItems.length + " card(s) from cloud.", false);
+        document.getElementById("status").textContent = "Plan page connected.";
+      } catch (error) {
+        console.error("Plan load failed:", error);
+        planBoardItems = [];
+        renderPlanBoard();
+        setPlanStatus("Load failed. Check Firestore rules for plans collection.", true);
+        document.getElementById("status").textContent = "Load failed: " + (error.code || error.message);
+      }
+    }
+
+    async function addPlanCard() {
+      if (!userId) { alert("Please sign in first."); return; }
+      const text = document.getElementById("planCardText").value.trim();
+      if (!text) { alert("Please enter a task."); return; }
+      planBoardItems.push({
+        id: createPlanItemId(),
+        text: text,
+        important: document.getElementById("planCardImportant").checked,
+        done: false,
+        order: planBoardItems.length
+      });
+      planBoardItems = sortPlanItems(planBoardItems);
+      await savePlanBoard();
+      document.getElementById("planCardText").value = "";
+      document.getElementById("planCardImportant").checked = false;
+      renderPlanBoard();
+    }
+
+    async function removePlanCard(itemId) {
+      planBoardItems = planBoardItems.filter((item) => item.id !== itemId).map((item, index) => ({ ...item, order: index }));
+      await savePlanBoard();
+      renderPlanBoard();
+    }
+
+    async function movePlanCard(itemId, direction) {
+      const sorted = sortPlanItems(planBoardItems);
+      const index = sorted.findIndex((item) => item.id === itemId);
+      const newIndex = index + direction;
+      if (index < 0 || newIndex < 0 || newIndex >= sorted.length) return;
+      const reordered = [...sorted];
+      const moved = reordered.splice(index, 1)[0];
+      reordered.splice(newIndex, 0, moved);
+      planBoardItems = reordered.map((item, idx) => ({ ...item, order: idx }));
+      await savePlanBoard();
+      renderPlanBoard();
+    }
+
+    async function shufflePlanBoard() {
+      if (!planBoardItems.length) { alert("Add cards first."); return; }
+      planBoardItems = shufflePlanItems(planBoardItems);
+      await savePlanBoard();
+      renderPlanBoard();
+    }
+
+    async function togglePlanCardDone(itemId) {
+      planBoardItems = planBoardItems.map((item) => item.id === itemId ? { ...item, done: !item.done } : item);
+      await savePlanBoard();
+      renderPlanBoard();
+    }
+
+    function getEmailPasswordInput() {
+      const email = document.getElementById("emailInput").value.trim();
+      const password = document.getElementById("passwordInput").value;
+      if (!email || !password) { alert("Please enter both email and password."); return null; }
+      if (password.length < 6) { alert("Password must be at least 6 characters."); return null; }
+      return { email, password };
+    }
+
+    async function signUpWithEmail() {
+      const data = getEmailPasswordInput();
+      if (!data) return;
+      if (auth.currentUser) { alert("You are already signed in."); return; }
+      await createUserWithEmailAndPassword(auth, data.email, data.password);
+      alert("Account created and signed in.");
+    }
+
+    async function signInWithEmail() {
+      const data = getEmailPasswordInput();
+      if (!data) return;
+      await signInWithEmailAndPassword(auth, data.email, data.password);
+      alert("Signed in successfully.");
+    }
+
+    async function signOutUser() {
+      await signOut(auth);
+      alert("Signed out.");
+    }
+
+    window.addPlanCard = addPlanCard;
+    window.removePlanCard = removePlanCard;
+    window.movePlanCard = movePlanCard;
+    window.shufflePlanBoard = shufflePlanBoard;
+    window.togglePlanCardDone = togglePlanCardDone;
+    window.signUpWithEmail = signUpWithEmail;
+    window.signInWithEmail = signInWithEmail;
+    window.signOutUser = signOutUser;
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        userId = user.uid;
+        document.getElementById("authInfo").textContent = "Signed in as " + (user.email || user.uid);
+        setActionAvailability(true);
+        await loadPlans();
+      } else {
+        userId = null;
+        planBoardItems = [];
+        renderPlanBoard();
+        setPlanStatus("Sign in to use task cards.", false);
+        document.getElementById("authInfo").textContent = "Sign in status: signed out";
+        setActionAvailability(false);
+        document.getElementById("status").textContent = "Please sign in with email and password.";
+      }
+    });
+  </script>
+</body>
+</html>
