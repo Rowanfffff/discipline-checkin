@@ -1194,25 +1194,29 @@
         return;
       }
 
-      const today = getLocalDateString();
-      const tomorrow = getDateAtDayOffset(new Date(), 1);
-      const oldToday = await loadPlanDoc(today);
-      const oldTomorrow = await loadPlanDoc(tomorrow);
-      const merged = [...oldToday, ...oldTomorrow];
-      if (!merged.length) {
-        return;
-      }
-
-      const seen = new Set();
-      planBoardItems = merged.filter((item) => {
-        if (seen.has(item.id)) {
-          return false;
+      try {
+        const today = getLocalDateString();
+        const tomorrow = getDateAtDayOffset(new Date(), 1);
+        const oldToday = await loadPlanDoc(today);
+        const oldTomorrow = await loadPlanDoc(tomorrow);
+        const merged = [...oldToday, ...oldTomorrow];
+        if (!merged.length) {
+          return;
         }
-        seen.add(item.id);
-        return true;
-      }).map((item, index) => ({ ...item, order: index }));
 
-      await savePlanBoard();
+        const seen = new Set();
+        planBoardItems = merged.filter((item) => {
+          if (seen.has(item.id)) {
+            return false;
+          }
+          seen.add(item.id);
+          return true;
+        }).map((item, index) => ({ ...item, order: index }));
+
+        await savePlanBoard();
+      } catch (error) {
+        console.warn("Plan migration skipped:", error);
+      }
     }
 
     function renderPlanBoard() {
@@ -1931,36 +1935,44 @@
     }
 
     async function loadUserData() {
-      const userRef = doc(db, "users", userId);
-      const userSnap = await getDoc(userRef);
+      const statusEl = document.getElementById("status");
+      statusEl.textContent = "Loading your data...";
 
-      if (userSnap.exists()) {
-        const data = userSnap.data();
+      try {
+        const userRef = doc(db, "users", userId);
+        const userSnap = await getDoc(userRef);
 
-        currentStreak = data.currentStreak || 0;
-        bestStreak = data.bestStreak || 0;
-        lastCheckIn = data.lastCheckIn || null;
-        lastSuccessCheckIn = data.lastSuccessCheckIn || null;
-      } else {
-        currentStreak = 0;
-        bestStreak = 0;
-        lastCheckIn = null;
-        lastSuccessCheckIn = null;
+        if (userSnap.exists()) {
+          const data = userSnap.data();
 
-        await saveUserData();
+          currentStreak = data.currentStreak || 0;
+          bestStreak = data.bestStreak || 0;
+          lastCheckIn = data.lastCheckIn || null;
+          lastSuccessCheckIn = data.lastSuccessCheckIn || null;
+        } else {
+          currentStreak = 0;
+          bestStreak = 0;
+          lastCheckIn = null;
+          lastSuccessCheckIn = null;
+
+          await saveUserData();
+        }
+
+        updateUI();
+        await renderHistory();
+        recomputeCurrentStreak();
+        if (userSnap.exists()) {
+          await saveUserData();
+        }
+        setupMakeupDateInput();
+        await loadPlans();
+
+        statusEl.textContent = "Cloud data connected.";
+      } catch (error) {
+        console.error("loadUserData failed:", error);
+        statusEl.textContent =
+          "Load failed: " + (error.code || error.message) + ". Check Firestore rules, then refresh.";
       }
-
-      updateUI();
-      await renderHistory();
-      recomputeCurrentStreak();
-      if (userSnap.exists()) {
-        await saveUserData();
-      }
-      setupMakeupDateInput();
-      await loadPlans();
-
-      document.getElementById("status").textContent =
-        "Cloud data connected.";
     }
 
     async function signOutUser() {
@@ -2228,34 +2240,40 @@
     });
 
     onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        userId = user.uid;
-        updateAuthUI(user);
-        setActionAvailability(true);
-        await loadUserData();
-      } else {
-        userId = null;
-        recentRecords = [];
-        showAllHistory = false;
-        historyFilter = "all";
-        updateHistoryFilterTabs();
-        planBoardItems = [];
-        renderPlanBoard();
-        setPlanStatus("Sign in to use task cards.", false);
-        currentStreak = 0;
-        bestStreak = 0;
-        lastCheckIn = null;
-        lastSuccessCheckIn = null;
-        updateAuthUI(null);
-        setActionAvailability(false);
-        updateUI();
-        document.getElementById("historyContainer").innerHTML =
-          "<p class=\"history-empty\">Sign in to view your history.</p>";
-        document.getElementById("toggleHistoryBtn").disabled = true;
-        document.getElementById("toggleHistoryBtn").textContent = "Show all";
+      try {
+        if (user) {
+          userId = user.uid;
+          updateAuthUI(user);
+          setActionAvailability(true);
+          await loadUserData();
+        } else {
+          userId = null;
+          recentRecords = [];
+          showAllHistory = false;
+          historyFilter = "all";
+          updateHistoryFilterTabs();
+          planBoardItems = [];
+          renderPlanBoard();
+          setPlanStatus("Sign in to use task cards.", false);
+          currentStreak = 0;
+          bestStreak = 0;
+          lastCheckIn = null;
+          lastSuccessCheckIn = null;
+          updateAuthUI(null);
+          setActionAvailability(false);
+          updateUI();
+          document.getElementById("historyContainer").innerHTML =
+            "<p class=\"history-empty\">Sign in to view your history.</p>";
+          document.getElementById("toggleHistoryBtn").disabled = true;
+          document.getElementById("toggleHistoryBtn").textContent = "Show all";
+          document.getElementById("status").textContent =
+            "Please sign in with email and password.";
+          renderWeeklySummary();
+        }
+      } catch (error) {
+        console.error("Auth init failed:", error);
         document.getElementById("status").textContent =
-          "Please sign in with email and password.";
-        renderWeeklySummary();
+          "Startup failed: " + (error.code || error.message);
       }
     });
   </script>
