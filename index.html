@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Discipline Check-in</title>
+  <title>Discipline Compass</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <style>
@@ -181,6 +181,118 @@
       background: white;
     }
 
+    .helper-text {
+      margin: 8px 0 0 0;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .section-title {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+    }
+
+    .review-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .review-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .review-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      color: #374151;
+      background: transparent;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      cursor: default;
+      align-items: stretch;
+    }
+
+    .review-field input,
+    .review-field textarea {
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: white;
+      width: 100%;
+      font-family: inherit;
+    }
+
+    .review-field textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .summary-card {
+      margin-top: 18px;
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      border-radius: 16px;
+      padding: 14px;
+      font-size: 14px;
+      color: #3730a3;
+    }
+
+    .summary-card p {
+      margin: 6px 0;
+    }
+
+    .weekly-strip {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .day-pill {
+      background: white;
+      border: 1px solid #c7d2fe;
+      border-radius: 10px;
+      text-align: center;
+      padding: 8px 4px;
+      font-size: 12px;
+      color: #4338ca;
+      font-weight: 600;
+    }
+
+    .day-pill.success {
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+    }
+
+    .day-pill.miss {
+      background: #fee2e2;
+      border-color: #fca5a5;
+      color: #991b1b;
+    }
+
+    .day-pill.empty {
+      background: #f3f4f6;
+      border-color: #d1d5db;
+      color: #6b7280;
+    }
+
+    @media (max-width: 520px) {
+      .review-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
     .footer-note {
       text-align: center;
       margin-top: 18px;
@@ -231,8 +343,8 @@
 
 <body>
   <div class="container">
-    <h1>Daily Discipline Check-in</h1>
-    <p class="subtitle">Small rules. Daily progress.</p>
+    <h1>Discipline Compass</h1>
+    <p class="subtitle">Build focus every day with honest self-checks.</p>
 
     <p id="status" class="status">Loading Firebase...</p>
 
@@ -240,6 +352,7 @@
       <p id="authInfo">Sign in status: loading...</p>
       <input id="emailInput" class="auth-input" type="email" placeholder="Email (for multi-device sync)">
       <input id="passwordInput" class="auth-input" type="password" placeholder="Password">
+      <p class="helper-text">Use one account on all devices to keep the same streak and history.</p>
       <div class="auth-row">
         <button class="secondary-btn" onclick="signUpWithEmail()">Sign up</button>
         <button class="secondary-btn" onclick="signInWithEmail()">Sign in</button>
@@ -281,6 +394,24 @@
       </label>
     </div>
 
+    <div class="review-card">
+      <h2 class="section-title">Daily self-check</h2>
+      <div class="review-grid">
+        <label class="review-field">
+          Focus score (1-10)
+          <input id="focusScore" type="number" min="1" max="10" value="7">
+        </label>
+        <label class="review-field">
+          Distraction minutes
+          <input id="distractionMinutes" type="number" min="0" max="1440" value="0">
+        </label>
+      </div>
+      <label class="review-field" style="margin-top:10px;">
+        Reflection note (what went well, what to improve tomorrow)
+        <textarea id="reflectionNote" placeholder="Example: I focused well in the morning. Tomorrow I should start phone-off study at 9:00."></textarea>
+      </label>
+    </div>
+
     <button class="primary-btn" onclick="checkIn()">Check in today</button>
 
     <button class="danger-btn" onclick="resetProgress()">Reset / Fresh Start</button>
@@ -292,6 +423,12 @@
       <div id="historyContainer">
         <p class="history-empty">Loading your records...</p>
       </div>
+    </div>
+
+    <div class="summary-card">
+      <p id="weeklySummary">Weekly summary: sign in to view your progress.</p>
+      <div id="weeklyStrip" class="weekly-strip"></div>
+      <p id="coachMessage">Coach note: consistency beats intensity.</p>
     </div>
   </div>
 
@@ -332,6 +469,7 @@
     const db = getFirestore(app);
 
     let userId = null;
+    let recentRecords = [];
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
@@ -401,6 +539,19 @@
         "Last check-in: " + (lastCheckIn || "none");
     }
 
+    function setActionAvailability(isSignedIn) {
+      const disabled = !isSignedIn;
+      document.querySelectorAll("input[type='checkbox']").forEach((el) => {
+        el.disabled = disabled;
+      });
+      const focusEl = document.getElementById("focusScore");
+      const distractionEl = document.getElementById("distractionMinutes");
+      const noteEl = document.getElementById("reflectionNote");
+      if (focusEl) focusEl.disabled = disabled;
+      if (distractionEl) distractionEl.disabled = disabled;
+      if (noteEl) noteEl.disabled = disabled;
+    }
+
     function updateAuthUI(user) {
       const authInfo = document.getElementById("authInfo");
 
@@ -452,16 +603,20 @@
         const snap = await getDocs(q);
 
         if (snap.empty) {
+          recentRecords = [];
           historyContainer.innerHTML = "<p class=\"history-empty\">No history yet. Start with your first check-in today.</p>";
+          renderWeeklySummary();
           return;
         }
 
         const sortedHistory = snap.docs
           .map((docSnap) => docSnap.data())
           .sort((a, b) => b.date.localeCompare(a.date))
-          .slice(0, 14);
+          .slice(0, 30);
 
-        const items = sortedHistory.map((data) => {
+        recentRecords = sortedHistory;
+
+        const items = sortedHistory.slice(0, 14).map((data) => {
           const outcome = data.success ? "Success" : "Failed";
           return (
             "<li class=\"history-item\">" +
@@ -472,9 +627,69 @@
         }).join("");
 
         historyContainer.innerHTML = "<ul class=\"history-list\">" + items + "</ul>";
+        renderWeeklySummary();
       } catch (error) {
         console.error("History load failed:", error);
+        recentRecords = [];
         historyContainer.innerHTML = "<p class=\"history-empty\">Could not load history. Check Firestore rules and refresh.</p>";
+        renderWeeklySummary();
+      }
+    }
+
+    function renderWeeklySummary() {
+      const weeklySummary = document.getElementById("weeklySummary");
+      const weeklyStrip = document.getElementById("weeklyStrip");
+      const coachMessage = document.getElementById("coachMessage");
+
+      if (!userId) {
+        weeklySummary.textContent = "Weekly summary: sign in to view your progress.";
+        weeklyStrip.innerHTML = "";
+        coachMessage.textContent = "Coach note: sign in and start your first focused day.";
+        return;
+      }
+
+      const today = new Date();
+      const last7 = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - i);
+        last7.push(getLocalDateString(date));
+      }
+
+      const mapByDate = new Map(recentRecords.map((record) => [record.date, record]));
+      let successCount = 0;
+      let focusSum = 0;
+      let focusCount = 0;
+
+      const stripHtml = last7.map((date) => {
+        const rec = mapByDate.get(date);
+        const day = date.slice(5);
+        if (!rec) {
+          return "<div class=\"day-pill empty\">" + day + "<br>-</div>";
+        }
+        if (rec.success) {
+          successCount++;
+        }
+        if (typeof rec.focusScore === "number") {
+          focusSum += rec.focusScore;
+          focusCount++;
+        }
+        const cls = rec.success ? "success" : "miss";
+        const mark = rec.success ? "OK" : "X";
+        return "<div class=\"day-pill " + cls + "\">" + day + "<br>" + mark + "</div>";
+      }).join("");
+
+      weeklyStrip.innerHTML = stripHtml;
+      const rate = Math.round((successCount / 7) * 100);
+      const avgFocus = focusCount ? (focusSum / focusCount).toFixed(1) : "n/a";
+      weeklySummary.textContent = "Weekly summary: " + successCount + "/7 successful days (" + rate + "%), avg focus " + avgFocus + ".";
+
+      if (successCount >= 6) {
+        coachMessage.textContent = "Coach note: excellent consistency - keep your routine stable.";
+      } else if (successCount >= 4) {
+        coachMessage.textContent = "Coach note: good momentum - protect your most focused hours.";
+      } else {
+        coachMessage.textContent = "Coach note: reset small - win tomorrow with one clear start time.";
       }
     }
 
@@ -589,6 +804,9 @@
       const work = document.getElementById("work").checked;
       const noChinese = document.getElementById("noChinese").checked;
       const english = document.getElementById("english").checked;
+      const focusScore = Number(document.getElementById("focusScore").value);
+      const distractionMinutes = Number(document.getElementById("distractionMinutes").value);
+      const reflectionNote = document.getElementById("reflectionNote").value.trim();
 
       if (!work || !noChinese || !english) {
         alert("You need to complete all rules before checking in.");
@@ -596,7 +814,17 @@
       }
 
       if (!userId) {
-        alert("Firebase is still loading. Try again in a few seconds.");
+        alert("Please sign in first.");
+        return;
+      }
+
+      if (!Number.isFinite(focusScore) || focusScore < 1 || focusScore > 10) {
+        alert("Focus score must be between 1 and 10.");
+        return;
+      }
+
+      if (!Number.isFinite(distractionMinutes) || distractionMinutes < 0 || distractionMinutes > 1440) {
+        alert("Distraction minutes must be between 0 and 1440.");
         return;
       }
 
@@ -632,6 +860,9 @@
         work: work,
         noChinese: noChinese,
         english: english,
+        focusScore: focusScore,
+        distractionMinutes: distractionMinutes,
+        reflectionNote: reflectionNote,
         success: true,
         createdAt: new Date().toISOString()
       });
@@ -644,7 +875,7 @@
 
     async function resetProgress() {
       if (!userId) {
-        alert("Firebase is still loading. Try again in a few seconds.");
+        alert("Please sign in first.");
         return;
       }
 
@@ -679,6 +910,8 @@
     window.signUpWithEmail = signUpWithEmail;
     window.signInWithEmail = signInWithEmail;
 
+    setActionAvailability(false);
+    renderWeeklySummary();
     updateCountdown();
     setInterval(updateCountdown, 1000);
 
@@ -686,18 +919,22 @@
       if (user) {
         userId = user.uid;
         updateAuthUI(user);
+        setActionAvailability(true);
         await loadUserData();
       } else {
         userId = null;
+        recentRecords = [];
         currentStreak = 0;
         bestStreak = 0;
         lastCheckIn = null;
         updateAuthUI(null);
+        setActionAvailability(false);
         updateUI();
         document.getElementById("historyContainer").innerHTML =
           "<p class=\"history-empty\">Sign in to view your history.</p>";
         document.getElementById("status").textContent =
           "Please sign in with email and password.";
+        renderWeeklySummary();
       }
     });
   </script>
