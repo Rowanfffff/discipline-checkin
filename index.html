@@ -276,6 +276,104 @@
       margin: 6px 0;
     }
 
+    .summary-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .summary-tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mini-btn.active {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1e40af;
+    }
+
+    .mini-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .summary-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    #summaryPeriodLabel {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e3a8a;
+      min-width: 140px;
+      text-align: center;
+    }
+
+    .summary-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .summary-stat {
+      background: white;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 12px;
+      color: #475569;
+    }
+
+    .summary-stat strong {
+      display: block;
+      font-size: 18px;
+      color: #1e3a8a;
+      margin-top: 4px;
+    }
+
+    .chart-wrap {
+      background: white;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 10px 8px 6px;
+      margin-bottom: 10px;
+      overflow-x: auto;
+    }
+
+    #summaryChart {
+      display: block;
+      width: 100%;
+      height: 220px;
+    }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: #475569;
+      margin-top: 6px;
+    }
+
+    .legend-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
     .weekly-strip {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -547,7 +645,34 @@
     </div>
 
     <div class="summary-card">
-      <p id="weeklySummary">Weekly summary: sign in to view your progress.</p>
+      <div class="summary-toolbar">
+        <h2 class="section-title" style="margin:0;">Progress summary</h2>
+        <div class="summary-tabs">
+          <button id="tabWeek" class="mini-btn active" type="button" onclick="setSummaryView('week')">Week</button>
+          <button id="tabMonth" class="mini-btn" type="button" onclick="setSummaryView('month')">Month</button>
+        </div>
+      </div>
+
+      <div class="summary-nav">
+        <button class="mini-btn" type="button" onclick="shiftSummaryPeriod(-1)">←</button>
+        <span id="summaryPeriodLabel">—</span>
+        <button id="tabSummaryNext" class="mini-btn" type="button" onclick="shiftSummaryPeriod(1)">→</button>
+      </div>
+
+      <p id="periodSummaryText">Sign in to view your progress summary.</p>
+
+      <div id="summaryStats" class="summary-stats"></div>
+
+      <div class="chart-wrap">
+        <canvas id="summaryChart"></canvas>
+        <div class="chart-legend">
+          <span><i class="legend-dot" style="background:#22c55e;"></i>Success</span>
+          <span><i class="legend-dot" style="background:#ef4444;"></i>Failed</span>
+          <span><i class="legend-dot" style="background:#cbd5e1;"></i>No record</span>
+          <span>Bar height = focus score (0-10)</span>
+        </div>
+      </div>
+
       <div id="weeklyStrip" class="weekly-strip"></div>
     </div>
   </div>
@@ -591,6 +716,8 @@
     let userId = null;
     let recentRecords = [];
     let showAllHistory = false;
+    let summaryViewMode = "week";
+    let summaryPeriodOffset = 0;
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
@@ -945,51 +1072,250 @@
       );
     }
 
-    function renderWeeklySummary() {
-      const weeklySummary = document.getElementById("weeklySummary");
-      const weeklyStrip = document.getElementById("weeklyStrip");
+    function getWeekPeriod(offset) {
+      const now = new Date();
+      const day = now.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + mondayOffset + offset * 7);
+      monday.setHours(0, 0, 0, 0);
 
-      if (!userId) {
-        weeklySummary.textContent = "Weekly summary: sign in to view your progress.";
-        weeklyStrip.innerHTML = "";
-        return;
+      const dates = [];
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        dates.push(getLocalDateString(date));
       }
 
-      const today = new Date();
-      const last7 = [];
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(today.getDate() - i);
-        last7.push(getLocalDateString(date));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const label = monday.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+        " - " + sunday.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+      return { dates: dates, label: label };
+    }
+
+    function getMonthPeriod(offset) {
+      const now = new Date();
+      const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+      const dates = [];
+
+      for (let day = 1; day <= lastDay; day++) {
+        dates.push(getLocalDateString(new Date(first.getFullYear(), first.getMonth(), day)));
       }
 
-      const mapByDate = new Map(recentRecords.map((record) => [record.date, record]));
+      const label = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      return { dates: dates, label: label };
+    }
+
+    function getSummaryPeriod() {
+      if (summaryViewMode === "month") {
+        return getMonthPeriod(summaryPeriodOffset);
+      }
+      return getWeekPeriod(summaryPeriodOffset);
+    }
+
+    function computePeriodStats(dates, mapByDate) {
       let successCount = 0;
+      let failCount = 0;
+      let emptyCount = 0;
       let focusSum = 0;
       let focusCount = 0;
+      let distractionSum = 0;
+      let distractionCount = 0;
 
-      const stripHtml = last7.map((date) => {
+      dates.forEach((date) => {
         const rec = mapByDate.get(date);
-        const day = date.slice(5);
         if (!rec) {
-          return "<div class=\"day-pill empty\">" + day + "<br>-</div>";
+          emptyCount++;
+          return;
         }
         if (rec.success) {
           successCount++;
+        } else {
+          failCount++;
         }
         if (typeof rec.focusScore === "number") {
           focusSum += rec.focusScore;
           focusCount++;
         }
+        if (typeof rec.distractionMinutes === "number") {
+          distractionSum += rec.distractionMinutes;
+          distractionCount++;
+        }
+      });
+
+      const totalDays = dates.length;
+      const recordedDays = successCount + failCount;
+      const successRate = totalDays ? Math.round((successCount / totalDays) * 100) : 0;
+
+      return {
+        totalDays: totalDays,
+        successCount: successCount,
+        failCount: failCount,
+        emptyCount: emptyCount,
+        recordedDays: recordedDays,
+        successRate: successRate,
+        avgFocus: focusCount ? (focusSum / focusCount).toFixed(1) : "n/a",
+        avgDistraction: distractionCount ? Math.round(distractionSum / distractionCount) : "n/a"
+      };
+    }
+
+    function renderSummaryStats(stats) {
+      const container = document.getElementById("summaryStats");
+      container.innerHTML =
+        "<div class=\"summary-stat\">Success days<strong>" + stats.successCount + "</strong></div>" +
+        "<div class=\"summary-stat\">Failed days<strong>" + stats.failCount + "</strong></div>" +
+        "<div class=\"summary-stat\">No record<strong>" + stats.emptyCount + "</strong></div>" +
+        "<div class=\"summary-stat\">Success rate<strong>" + stats.successRate + "%</strong></div>" +
+        "<div class=\"summary-stat\">Avg focus<strong>" + stats.avgFocus + "</strong></div>" +
+        "<div class=\"summary-stat\">Avg distraction<strong>" + stats.avgDistraction + " min</strong></div>";
+    }
+
+    function drawSummaryChart(dates, mapByDate) {
+      const canvas = document.getElementById("summaryChart");
+      const wrap = canvas.parentElement;
+      const width = Math.max(wrap.clientWidth - 16, 280);
+      const height = 220;
+      const ratio = window.devicePixelRatio || 1;
+
+      canvas.width = Math.floor(width * ratio);
+      canvas.height = Math.floor(height * ratio);
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const padding = { top: 16, right: 12, bottom: 34, left: 30 };
+      const chartW = width - padding.left - padding.right;
+      const chartH = height - padding.top - padding.bottom;
+      const barGap = summaryViewMode === "week" ? 10 : 2;
+      const barWidth = Math.max(4, (chartW - barGap * (dates.length - 1)) / dates.length);
+
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, padding.top);
+      ctx.lineTo(padding.left, padding.top + chartH);
+      ctx.lineTo(padding.left + chartW, padding.top + chartH);
+      ctx.stroke();
+
+      ctx.fillStyle = "#64748b";
+      ctx.font = "11px sans-serif";
+      ctx.fillText("10", 8, padding.top + 4);
+      ctx.fillText("0", 12, padding.top + chartH);
+
+      dates.forEach((date, index) => {
+        const rec = mapByDate.get(date);
+        const x = padding.left + index * (barWidth + barGap);
+        const focus = rec && typeof rec.focusScore === "number" ? rec.focusScore : 0;
+        const barH = (focus / 10) * chartH;
+        const y = padding.top + chartH - barH;
+
+        if (!rec) {
+          ctx.fillStyle = "#cbd5e1";
+        } else if (rec.success) {
+          ctx.fillStyle = "#22c55e";
+        } else {
+          ctx.fillStyle = "#ef4444";
+        }
+
+        ctx.fillRect(x, y, barWidth, barH);
+
+        if (summaryViewMode === "week" || dates.length <= 12 || index % 5 === 0 || index === dates.length - 1) {
+          ctx.fillStyle = "#475569";
+          ctx.font = "10px sans-serif";
+          const label = summaryViewMode === "week"
+            ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index] || date.slice(8)
+            : date.slice(8);
+          ctx.fillText(label, x, height - 12);
+        }
+      });
+    }
+
+    function renderDayStrip(dates, mapByDate) {
+      const weeklyStrip = document.getElementById("weeklyStrip");
+      if (summaryViewMode !== "week") {
+        weeklyStrip.style.display = "none";
+        weeklyStrip.innerHTML = "";
+        return;
+      }
+
+      weeklyStrip.style.display = "grid";
+      weeklyStrip.innerHTML = dates.map((date) => {
+        const rec = mapByDate.get(date);
+        const day = date.slice(8);
+        if (!rec) {
+          return "<div class=\"day-pill empty\">" + day + "<br>-</div>";
+        }
         const cls = rec.success ? "success" : "miss";
         const mark = rec.success ? "OK" : "X";
         return "<div class=\"day-pill " + cls + "\">" + day + "<br>" + mark + "</div>";
       }).join("");
+    }
 
-      weeklyStrip.innerHTML = stripHtml;
-      const rate = Math.round((successCount / 7) * 100);
-      const avgFocus = focusCount ? (focusSum / focusCount).toFixed(1) : "n/a";
-      weeklySummary.textContent = "Weekly summary: " + successCount + "/7 successful days (" + rate + "%), avg focus " + avgFocus + ".";
+    function updateSummaryTabs() {
+      document.getElementById("tabWeek").classList.toggle("active", summaryViewMode === "week");
+      document.getElementById("tabMonth").classList.toggle("active", summaryViewMode === "month");
+      document.getElementById("tabSummaryNext").disabled = summaryPeriodOffset >= 0;
+    }
+
+    function setSummaryView(mode) {
+      summaryViewMode = mode;
+      summaryPeriodOffset = 0;
+      updateSummaryTabs();
+      renderPeriodSummary();
+    }
+
+    function shiftSummaryPeriod(delta) {
+      summaryPeriodOffset += delta;
+      if (summaryPeriodOffset > 0) {
+        summaryPeriodOffset = 0;
+      }
+      updateSummaryTabs();
+      renderPeriodSummary();
+    }
+
+    function renderPeriodSummary() {
+      const periodSummaryText = document.getElementById("periodSummaryText");
+      const periodLabel = document.getElementById("summaryPeriodLabel");
+      const summaryStats = document.getElementById("summaryStats");
+      const weeklyStrip = document.getElementById("weeklyStrip");
+      const canvas = document.getElementById("summaryChart");
+
+      if (!userId) {
+        periodSummaryText.textContent = "Sign in to view your progress summary.";
+        periodLabel.textContent = "—";
+        summaryStats.innerHTML = "";
+        weeklyStrip.innerHTML = "";
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        return;
+      }
+
+      const period = getSummaryPeriod();
+      const mapByDate = new Map(recentRecords.map((record) => [record.date, record]));
+      const stats = computePeriodStats(period.dates, mapByDate);
+
+      periodLabel.textContent = period.label;
+      const modeLabel = summaryViewMode === "week" ? "Week" : "Month";
+      periodSummaryText.textContent =
+        modeLabel + " overview: " + stats.successCount + " success, " + stats.failCount + " failed, " +
+        stats.emptyCount + " empty out of " + stats.totalDays + " days.";
+
+      renderSummaryStats(stats);
+      drawSummaryChart(period.dates, mapByDate);
+      renderDayStrip(period.dates, mapByDate);
+      updateSummaryTabs();
+    }
+
+    function renderWeeklySummary() {
+      renderPeriodSummary();
     }
 
     function updateDisciplineDayInfo(now = new Date()) {
@@ -1274,12 +1600,20 @@
     window.signUpWithEmail = signUpWithEmail;
     window.signInWithEmail = signInWithEmail;
     window.toggleHistoryMode = toggleHistoryMode;
+    window.setSummaryView = setSummaryView;
+    window.shiftSummaryPeriod = shiftSummaryPeriod;
 
     setActionAvailability(false);
     setupMakeupDateInput();
+    updateSummaryTabs();
     renderWeeklySummary();
     updateCountdown();
     setInterval(updateCountdown, 1000);
+    window.addEventListener("resize", () => {
+      if (userId) {
+        renderPeriodSummary();
+      }
+    });
 
     onAuthStateChanged(auth, async (user) => {
       if (user) {
