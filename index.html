@@ -313,6 +313,28 @@
       font-size: 16px;
     }
 
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .history-header .history-title {
+      margin: 0;
+    }
+
+    .mini-btn {
+      border: 1px solid #d1d5db;
+      background: white;
+      color: #111827;
+      border-radius: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
     .history-list {
       list-style: none;
       margin: 0;
@@ -419,7 +441,10 @@
     <p class="footer-note">Deadline: 12:30 AM every day</p>
 
     <div class="history-card">
-      <h2 class="history-title">Recent check-in history</h2>
+      <div class="history-header">
+        <h2 class="history-title">Check-in history</h2>
+        <button id="toggleHistoryBtn" class="mini-btn" onclick="toggleHistoryMode()">Show all</button>
+      </div>
       <div id="historyContainer">
         <p class="history-empty">Loading your records...</p>
       </div>
@@ -470,6 +495,7 @@
 
     let userId = null;
     let recentRecords = [];
+    let showAllHistory = false;
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
@@ -594,6 +620,7 @@
 
     async function renderHistory() {
       const historyContainer = document.getElementById("historyContainer");
+      const toggleBtn = document.getElementById("toggleHistoryBtn");
       try {
         const q = query(
           collection(db, "checkins"),
@@ -605,18 +632,41 @@
         if (snap.empty) {
           recentRecords = [];
           historyContainer.innerHTML = "<p class=\"history-empty\">No history yet. Start with your first check-in today.</p>";
+          toggleBtn.disabled = true;
+          toggleBtn.textContent = "Show all";
           renderWeeklySummary();
           return;
         }
 
         const sortedHistory = snap.docs
           .map((docSnap) => docSnap.data())
-          .sort((a, b) => b.date.localeCompare(a.date))
-          .slice(0, 30);
+          .sort((a, b) => b.date.localeCompare(a.date));
 
         recentRecords = sortedHistory;
+        toggleBtn.disabled = false;
+        renderHistoryList();
+        renderWeeklySummary();
+      } catch (error) {
+        console.error("History load failed:", error);
+        recentRecords = [];
+        historyContainer.innerHTML = "<p class=\"history-empty\">Could not load history. Check Firestore rules and refresh.</p>";
+        toggleBtn.disabled = true;
+        toggleBtn.textContent = "Show all";
+        renderWeeklySummary();
+      }
+    }
 
-        const items = sortedHistory.slice(0, 14).map((data) => {
+    function renderHistoryList() {
+      const historyContainer = document.getElementById("historyContainer");
+      const toggleBtn = document.getElementById("toggleHistoryBtn");
+      if (!recentRecords.length) {
+        historyContainer.innerHTML = "<p class=\"history-empty\">No history yet. Start with your first check-in today.</p>";
+        toggleBtn.textContent = "Show all";
+        return;
+      }
+
+      const rows = showAllHistory ? recentRecords : recentRecords.slice(0, 14);
+      const items = rows.map((data) => {
           const outcome = data.success ? "Success" : "Failed";
           return (
             "<li class=\"history-item\">" +
@@ -624,16 +674,15 @@
             "<span>" + outcome + "</span>" +
             "</li>"
           );
-        }).join("");
+      }).join("");
 
-        historyContainer.innerHTML = "<ul class=\"history-list\">" + items + "</ul>";
-        renderWeeklySummary();
-      } catch (error) {
-        console.error("History load failed:", error);
-        recentRecords = [];
-        historyContainer.innerHTML = "<p class=\"history-empty\">Could not load history. Check Firestore rules and refresh.</p>";
-        renderWeeklySummary();
-      }
+      historyContainer.innerHTML = "<ul class=\"history-list\">" + items + "</ul>";
+      toggleBtn.textContent = showAllHistory ? "Show recent" : "Show all";
+    }
+
+    function toggleHistoryMode() {
+      showAllHistory = !showAllHistory;
+      renderHistoryList();
     }
 
     function renderWeeklySummary() {
@@ -909,6 +958,7 @@
     window.signOutUser = signOutUser;
     window.signUpWithEmail = signUpWithEmail;
     window.signInWithEmail = signInWithEmail;
+    window.toggleHistoryMode = toggleHistoryMode;
 
     setActionAvailability(false);
     renderWeeklySummary();
@@ -924,6 +974,7 @@
       } else {
         userId = null;
         recentRecords = [];
+        showAllHistory = false;
         currentStreak = 0;
         bestStreak = 0;
         lastCheckIn = null;
@@ -932,6 +983,8 @@
         updateUI();
         document.getElementById("historyContainer").innerHTML =
           "<p class=\"history-empty\">Sign in to view your history.</p>";
+        document.getElementById("toggleHistoryBtn").disabled = true;
+        document.getElementById("toggleHistoryBtn").textContent = "Show all";
         document.getElementById("status").textContent =
           "Please sign in with email and password.";
         renderWeeklySummary();
