@@ -62,7 +62,7 @@
       text-decoration: none;
     }
 
-    .auth-card, .review-card {
+    .review-card {
       background: var(--surface-soft);
       border: 1px solid var(--line);
       border-radius: 16px;
@@ -96,7 +96,15 @@
     }
 
     .primary-btn { background: linear-gradient(180deg, #3b82f6, var(--brand)); color: white; }
-    .secondary-btn { background: #f8fafc; color: #0f172a; border: 1px solid var(--line); }
+    .secondary-btn {
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid var(--line);
+    }
+
+    .secondary-btn:hover {
+      background: #eef2f7;
+    }
 
     .helper-text { margin: 8px 0 0; font-size: 12px; color: var(--text-muted); }
     #planStatus.error { color: #b91c1c; }
@@ -145,11 +153,6 @@
       font-size: 13px;
       text-decoration: none;
       display: inline-block;
-      border-radius: 10px;
-      background: #f8fafc;
-      border: 1px solid var(--line);
-      color: #0f172a;
-      cursor: pointer;
     }
   </style>
 </head>
@@ -165,12 +168,12 @@
     <div class="auth-bar">
       <p id="authInfo">Checking sign-in...</p>
       <div class="auth-bar-actions">
-        <a id="loginLink" href="login.html?return=plan.html">Sign in</a>
-        <button id="signOutBtn" type="button" onclick="signOutUser()" style="display:none;">Sign out</button>
+        <a id="loginLink" class="secondary-btn" href="login.html?return=plan.html">Sign in</a>
+        <button id="signOutBtn" class="secondary-btn" type="button" onclick="signOutUser()" style="display:none;">Sign out</button>
       </div>
     </div>
 
-    <div class="review-card">
+    <div id="planPanel" class="review-card">
       <h2 class="section-title">Task cards</h2>
       <p id="planStatus" class="helper-text">Add cards anytime. They save to cloud and stay after refresh.</p>
       <div class="plan-add-row">
@@ -245,6 +248,9 @@
       const disabled = !isSignedIn;
       document.getElementById("planCardText").disabled = disabled;
       document.getElementById("planCardImportant").disabled = disabled;
+      document.querySelectorAll("#planPanel button").forEach((el) => {
+        el.disabled = disabled;
+      });
     }
 
     function createPlanItemId() {
@@ -407,15 +413,18 @@
       const loginLink = document.getElementById("loginLink");
       const signOutBtn = document.getElementById("signOutBtn");
       const authInfo = document.getElementById("authInfo");
+      const planPanel = document.getElementById("planPanel");
       if (!user) {
         authInfo.textContent = "Not signed in";
-        loginLink.style.display = "inline-block";
-        signOutBtn.style.display = "none";
+        if (loginLink) loginLink.style.display = "inline-block";
+        if (signOutBtn) signOutBtn.style.display = "none";
+        if (planPanel) planPanel.style.display = "none";
         return;
       }
       authInfo.textContent = user.email || "Signed in";
-      loginLink.style.display = "none";
-      signOutBtn.style.display = "inline-block";
+      if (loginLink) loginLink.style.display = "none";
+      if (signOutBtn) signOutBtn.style.display = "inline-block";
+      if (planPanel) planPanel.style.display = "";
     }
 
     async function signOutUser() {
@@ -430,20 +439,28 @@
     window.togglePlanCardDone = togglePlanCardDone;
     window.signOutUser = signOutUser;
 
+    setActionAvailability(false);
+
     onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        userId = user.uid;
-        updateAuthUI(user);
-        setActionAvailability(true);
-        await loadPlans();
-      } else {
-        userId = null;
-        planBoardItems = [];
-        renderPlanBoard();
-        setPlanStatus("Sign in to use task cards.", false);
-        updateAuthUI(null);
-        setActionAvailability(false);
-        document.getElementById("status").textContent = "Please sign in to use task cards.";
+      try {
+        if (user) {
+          userId = user.uid;
+          updateAuthUI(user);
+          setActionAvailability(true);
+          await loadPlans();
+        } else {
+          userId = null;
+          planBoardItems = [];
+          renderPlanBoard();
+          updateAuthUI(null);
+          setActionAvailability(false);
+          document.getElementById("status").textContent =
+            "Please sign in to use task cards.";
+        }
+      } catch (error) {
+        console.error("Auth init failed:", error);
+        document.getElementById("status").textContent =
+          "Startup failed: " + (error.code || error.message);
       }
     });
   </script>
