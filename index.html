@@ -409,6 +409,13 @@
       authInfo.textContent = "Sign in status: synced as " + (user.email || user.uid);
     }
 
+    function shouldUseRedirectAuth() {
+      const ua = navigator.userAgent.toLowerCase();
+      const isIOS = /iphone|ipad|ipod/.test(ua);
+      const isSafari = ua.includes("safari") && !ua.includes("chrome") && !ua.includes("crios") && !ua.includes("android");
+      return isIOS || isSafari;
+    }
+
     async function saveUserData() {
       await setDoc(doc(db, "users", userId), {
         currentStreak: currentStreak,
@@ -523,14 +530,23 @@
     async function connectGoogle() {
       try {
         const provider = new GoogleAuthProvider();
+        const useRedirect = shouldUseRedirectAuth();
 
         if (!auth.currentUser) {
-          await signInWithPopup(auth, provider);
+          if (useRedirect) {
+            await signInWithRedirect(auth, provider);
+          } else {
+            await signInWithPopup(auth, provider);
+          }
           return;
         }
 
         if (auth.currentUser.isAnonymous) {
-          await linkWithPopup(auth.currentUser, provider);
+          if (useRedirect) {
+            await linkWithRedirect(auth.currentUser, provider);
+          } else {
+            await linkWithPopup(auth.currentUser, provider);
+          }
           alert("Synced! Your current data is now linked to Google.");
           return;
         }
