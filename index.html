@@ -602,6 +602,78 @@
       margin-top: 0;
       flex: 1;
     }
+
+    .plan-list {
+      list-style: none;
+      margin: 10px 0 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .plan-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    .plan-item.important {
+      border-color: #93c5fd;
+      background: #eff6ff;
+    }
+
+    .plan-item.done span {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    .plan-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: #1e40af;
+      background: #dbeafe;
+      border-radius: 999px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    .plan-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .plan-actions button {
+      margin-top: 0;
+      flex: 1;
+    }
+
+    .plan-add-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      align-items: center;
+    }
+
+    .plan-add-row input[type="text"] {
+      flex: 1;
+      margin-top: 0;
+    }
+
+    .plan-important-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: #475569;
+      white-space: nowrap;
+    }
   </style>
 </head>
 
@@ -649,6 +721,15 @@
       <p id="countdown">Time left before streak reset: loading...</p>
     </div>
 
+    <div class="review-card" id="todayPlanCard">
+      <h2 class="section-title">Today's plan</h2>
+      <p class="helper-text">Important tasks stay on top. Shuffle randomizes the rest.</p>
+      <ul id="todayPlanList" class="plan-list"></ul>
+      <div class="plan-actions">
+        <button class="secondary-btn" type="button" onclick="shuffleTodayPlan()">Shuffle order</button>
+      </div>
+    </div>
+
     <div class="checklist">
       <label>
         <input type="checkbox" id="work">
@@ -686,6 +767,23 @@
 
     <button class="primary-btn" onclick="checkIn()">Success check-in (today)</button>
     <button class="secondary-btn" onclick="recordFailToday()">Record failed day + self-check (today)</button>
+
+    <div class="review-card">
+      <h2 class="section-title">Plan for tomorrow</h2>
+      <p class="helper-text">Add tasks tonight. Tomorrow they appear at the top of Check-in. Mark important to keep first after shuffle.</p>
+      <div class="plan-add-row">
+        <input id="tomorrowPlanText" class="auth-input" type="text" placeholder="Task for tomorrow">
+        <label class="plan-important-label">
+          <input id="tomorrowPlanImportant" type="checkbox">
+          Important
+        </label>
+      </div>
+      <button class="secondary-btn" type="button" onclick="addTomorrowPlanItem()">Add task</button>
+      <ul id="tomorrowPlanList" class="plan-list"></ul>
+      <div class="plan-actions">
+        <button class="secondary-btn" type="button" onclick="shuffleTomorrowPlan()">Shuffle order</button>
+      </div>
+    </div>
 
     <div class="review-card">
       <h2 class="section-title">Make-up check-in</h2>
@@ -806,6 +904,8 @@
     let summaryPeriodOffset = 0;
     let historyFilter = "all";
     let activeAppPage = "checkin";
+    let todayPlanItems = [];
+    let tomorrowPlanItems = [];
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
@@ -995,6 +1095,198 @@
       if (noteEl) noteEl.disabled = disabled;
       const makeupDateEl = document.getElementById("makeupDate");
       if (makeupDateEl) makeupDateEl.disabled = disabled;
+      const tomorrowPlanText = document.getElementById("tomorrowPlanText");
+      const tomorrowPlanImportant = document.getElementById("tomorrowPlanImportant");
+      if (tomorrowPlanText) tomorrowPlanText.disabled = disabled;
+      if (tomorrowPlanImportant) tomorrowPlanImportant.disabled = disabled;
+    }
+
+    function createPlanItemId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    function sortPlanItems(items) {
+      return [...items].sort((a, b) => a.order - b.order);
+    }
+
+    function shuffleArray(array) {
+      const copy = [...array];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = copy[i];
+        copy[i] = copy[j];
+        copy[j] = temp;
+      }
+      return copy;
+    }
+
+    function shufflePlanItems(items) {
+      const importantItems = sortPlanItems(items.filter((item) => item.important));
+      const normalItems = shuffleArray(items.filter((item) => !item.important));
+      const merged = [...importantItems, ...normalItems];
+      return merged.map((item, index) => ({
+        ...item,
+        order: index
+      }));
+    }
+
+    async function loadPlanForDate(dateStr) {
+      const planRef = doc(db, "plans", userId + "_" + dateStr);
+      const planSnap = await getDoc(planRef);
+      if (!planSnap.exists()) {
+        return [];
+      }
+      const data = planSnap.data();
+      return sortPlanItems(data.items || []);
+    }
+
+    async function savePlanForDate(dateStr, items) {
+      await setDoc(doc(db, "plans", userId + "_" + dateStr), {
+        userId: userId,
+        date: dateStr,
+        items: items,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+
+    function renderPlanList(containerId, items, options) {
+      const container = document.getElementById(containerId);
+      if (!items.length) {
+        container.innerHTML = "<p class=\"history-empty\">No tasks yet.</p>";
+        return;
+      }
+
+      const sorted = sortPlanItems(items);
+      container.innerHTML = sorted.map((item, index) => {
+        const importantClass = item.important ? " important" : "";
+        const doneClass = item.done ? " done" : "";
+        const badge = item.important ? "<span class=\"plan-badge\">Important</span>" : "";
+        const orderLabel = "<span class=\"plan-badge\" style=\"background:#f1f5f9;color:#475569;\">#" + (index + 1) + "</span>";
+
+        let leftControl = "";
+        if (options.allowDone) {
+          leftControl = "<input type=\"checkbox\" " + (item.done ? "checked" : "") + " onchange=\"toggleTodayPlanDone('" + item.id + "')\">";
+        }
+
+        const removeBtn = "<button class=\"mini-btn\" type=\"button\" onclick=\"" + options.removeHandler + "('" + item.id + "')\">Remove</button>";
+
+        return (
+          "<li class=\"plan-item" + importantClass + doneClass + "\">" +
+          leftControl +
+          orderLabel +
+          badge +
+          "<span style=\"flex:1;\">" + escapeHtml(item.text) + "</span>" +
+          removeBtn +
+          "</li>"
+        );
+      }).join("");
+    }
+
+    function renderPlanSections() {
+      renderPlanList("todayPlanList", todayPlanItems, {
+        allowDone: true,
+        removeHandler: "removeTodayPlanItem"
+      });
+      renderPlanList("tomorrowPlanList", tomorrowPlanItems, {
+        allowDone: false,
+        removeHandler: "removeTomorrowPlanItem"
+      });
+    }
+
+    async function loadPlans() {
+      if (!userId) {
+        todayPlanItems = [];
+        tomorrowPlanItems = [];
+        renderPlanSections();
+        return;
+      }
+
+      const today = getLocalDateString();
+      const tomorrow = getDateAtDayOffset(new Date(), 1);
+      todayPlanItems = await loadPlanForDate(today);
+      tomorrowPlanItems = await loadPlanForDate(tomorrow);
+      renderPlanSections();
+    }
+
+    async function addTomorrowPlanItem() {
+      if (!userId) {
+        alert("Please sign in first.");
+        return;
+      }
+
+      const textInput = document.getElementById("tomorrowPlanText");
+      const importantInput = document.getElementById("tomorrowPlanImportant");
+      const text = textInput.value.trim();
+
+      if (!text) {
+        alert("Please enter a task.");
+        return;
+      }
+
+      const tomorrow = getDateAtDayOffset(new Date(), 1);
+      tomorrowPlanItems.push({
+        id: createPlanItemId(),
+        text: text,
+        important: importantInput.checked,
+        done: false,
+        order: tomorrowPlanItems.length
+      });
+
+      tomorrowPlanItems = sortPlanItems(tomorrowPlanItems);
+      await savePlanForDate(tomorrow, tomorrowPlanItems);
+      textInput.value = "";
+      importantInput.checked = false;
+      renderPlanSections();
+    }
+
+    async function removeTomorrowPlanItem(itemId) {
+      const tomorrow = getDateAtDayOffset(new Date(), 1);
+      tomorrowPlanItems = tomorrowPlanItems.filter((item) => item.id !== itemId)
+        .map((item, index) => ({ ...item, order: index }));
+      await savePlanForDate(tomorrow, tomorrowPlanItems);
+      renderPlanSections();
+    }
+
+    async function removeTodayPlanItem(itemId) {
+      const today = getLocalDateString();
+      todayPlanItems = todayPlanItems.filter((item) => item.id !== itemId)
+        .map((item, index) => ({ ...item, order: index }));
+      await savePlanForDate(today, todayPlanItems);
+      renderPlanSections();
+    }
+
+    async function shuffleTomorrowPlan() {
+      if (!tomorrowPlanItems.length) {
+        alert("Add tasks first.");
+        return;
+      }
+      const tomorrow = getDateAtDayOffset(new Date(), 1);
+      tomorrowPlanItems = shufflePlanItems(tomorrowPlanItems);
+      await savePlanForDate(tomorrow, tomorrowPlanItems);
+      renderPlanSections();
+    }
+
+    async function shuffleTodayPlan() {
+      if (!todayPlanItems.length) {
+        alert("No tasks in today's plan.");
+        return;
+      }
+      const today = getLocalDateString();
+      todayPlanItems = shufflePlanItems(todayPlanItems);
+      await savePlanForDate(today, todayPlanItems);
+      renderPlanSections();
+    }
+
+    async function toggleTodayPlanDone(itemId) {
+      const today = getLocalDateString();
+      todayPlanItems = todayPlanItems.map((item) => {
+        if (item.id === itemId) {
+          return { ...item, done: !item.done };
+        }
+        return item;
+      });
+      await savePlanForDate(today, todayPlanItems);
+      renderPlanSections();
     }
 
     function updateAuthUI(user) {
@@ -1600,6 +1892,7 @@
         await saveUserData();
       }
       setupMakeupDateInput();
+      await loadPlans();
 
       document.getElementById("status").textContent =
         "Cloud data connected.";
@@ -1850,6 +2143,12 @@
     window.exportDataJson = exportDataJson;
     window.exportDataCsv = exportDataCsv;
     window.setAppPage = setAppPage;
+    window.addTomorrowPlanItem = addTomorrowPlanItem;
+    window.removeTomorrowPlanItem = removeTomorrowPlanItem;
+    window.removeTodayPlanItem = removeTodayPlanItem;
+    window.shuffleTomorrowPlan = shuffleTomorrowPlan;
+    window.shuffleTodayPlan = shuffleTodayPlan;
+    window.toggleTodayPlanDone = toggleTodayPlanDone;
 
     setActionAvailability(false);
     setupMakeupDateInput();
@@ -1876,6 +2175,9 @@
         showAllHistory = false;
         historyFilter = "all";
         updateHistoryFilterTabs();
+        todayPlanItems = [];
+        tomorrowPlanItems = [];
+        renderPlanSections();
         currentStreak = 0;
         bestStreak = 0;
         lastCheckIn = null;
