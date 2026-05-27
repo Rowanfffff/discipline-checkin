@@ -171,6 +171,16 @@
       margin-top: 0;
     }
 
+    .auth-input {
+      width: 100%;
+      margin-top: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: white;
+    }
+
     .footer-note {
       text-align: center;
       margin-top: 18px;
@@ -228,6 +238,12 @@
 
     <div class="auth-card">
       <p id="authInfo">Sign in status: loading...</p>
+      <input id="emailInput" class="auth-input" type="email" placeholder="Email (for multi-device sync)">
+      <input id="passwordInput" class="auth-input" type="password" placeholder="Password">
+      <div class="auth-row">
+        <button class="secondary-btn" onclick="signUpWithEmail()">Sign up</button>
+        <button class="secondary-btn" onclick="signInWithEmail()">Sign in</button>
+      </div>
       <div class="auth-row">
         <button class="secondary-btn" onclick="connectGoogle()">Sync with Google</button>
         <button class="secondary-btn" onclick="signOutUser()">Sign out</button>
@@ -294,7 +310,11 @@
       linkWithPopup,
       signOut,
       signInWithRedirect,
-      linkWithRedirect
+      linkWithRedirect,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      EmailAuthProvider,
+      linkWithCredential
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
     import {
@@ -604,6 +624,63 @@
       }
     }
 
+    function getEmailPasswordInput() {
+      const email = document.getElementById("emailInput").value.trim();
+      const password = document.getElementById("passwordInput").value;
+
+      if (!email || !password) {
+        alert("Please enter both email and password.");
+        return null;
+      }
+
+      if (password.length < 6) {
+        alert("Password must be at least 6 characters.");
+        return null;
+      }
+
+      return { email, password };
+    }
+
+    async function signUpWithEmail() {
+      const data = getEmailPasswordInput();
+      if (!data) {
+        return;
+      }
+
+      try {
+        if (auth.currentUser && auth.currentUser.isAnonymous) {
+          const credential = EmailAuthProvider.credential(data.email, data.password);
+          await linkWithCredential(auth.currentUser, credential);
+          alert("Account created and linked. Your current data is now synced.");
+          return;
+        }
+
+        await createUserWithEmailAndPassword(auth, data.email, data.password);
+        alert("Account created and signed in.");
+      } catch (error) {
+        console.error("Email sign-up failed:", error);
+        alert("Sign-up failed: " + (error.code || "unknown-error"));
+      }
+    }
+
+    async function signInWithEmail() {
+      const data = getEmailPasswordInput();
+      if (!data) {
+        return;
+      }
+
+      try {
+        if (auth.currentUser && auth.currentUser.isAnonymous) {
+          await signOut(auth);
+        }
+        await signInWithEmailAndPassword(auth, data.email, data.password);
+        alert("Signed in successfully.");
+      } catch (error) {
+        console.error("Email sign-in failed:", error);
+        alert("Sign-in failed: " + (error.code || "unknown-error"));
+      }
+    }
+
     async function checkIn() {
       const work = document.getElementById("work").checked;
       const noChinese = document.getElementById("noChinese").checked;
@@ -696,6 +773,8 @@
     window.resetProgress = resetProgress;
     window.connectGoogle = connectGoogle;
     window.signOutUser = signOutUser;
+    window.signUpWithEmail = signUpWithEmail;
+    window.signInWithEmail = signInWithEmail;
 
     updateCountdown();
     setInterval(updateCountdown, 1000);
