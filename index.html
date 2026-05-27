@@ -243,9 +243,6 @@
       <div class="auth-row">
         <button class="secondary-btn" onclick="signUpWithEmail()">Sign up</button>
         <button class="secondary-btn" onclick="signInWithEmail()">Sign in</button>
-      </div>
-      <div class="auth-row">
-        <button class="secondary-btn" onclick="connectGoogle()">Sync with Google</button>
         <button class="secondary-btn" onclick="signOutUser()">Sign out</button>
       </div>
     </div>
@@ -303,18 +300,10 @@
 
     import {
       getAuth,
-      signInAnonymously,
       onAuthStateChanged,
-      GoogleAuthProvider,
-      signInWithPopup,
-      linkWithPopup,
       signOut,
-      signInWithRedirect,
-      linkWithRedirect,
       createUserWithEmailAndPassword,
-      signInWithEmailAndPassword,
-      EmailAuthProvider,
-      linkWithCredential
+      signInWithEmailAndPassword
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
     import {
@@ -343,7 +332,6 @@
     const db = getFirestore(app);
 
     let userId = null;
-    let authUser = null;
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
@@ -421,19 +409,7 @@
         return;
       }
 
-      if (user.isAnonymous) {
-        authInfo.textContent = "Sign in status: guest mode (this device only)";
-        return;
-      }
-
       authInfo.textContent = "Sign in status: synced as " + (user.email || user.uid);
-    }
-
-    function shouldUseRedirectAuth() {
-      const ua = navigator.userAgent.toLowerCase();
-      const isIOS = /iphone|ipad|ipod/.test(ua);
-      const isSafari = ua.includes("safari") && !ua.includes("chrome") && !ua.includes("crios") && !ua.includes("android");
-      return isIOS || isSafari;
     }
 
     async function saveUserData() {
@@ -547,77 +523,10 @@
         "Cloud data connected.";
     }
 
-    async function connectGoogle() {
-      try {
-        const provider = new GoogleAuthProvider();
-        const useRedirect = shouldUseRedirectAuth();
-
-        if (!auth.currentUser) {
-          if (useRedirect) {
-            await signInWithRedirect(auth, provider);
-          } else {
-            await signInWithPopup(auth, provider);
-          }
-          return;
-        }
-
-        if (auth.currentUser.isAnonymous) {
-          if (useRedirect) {
-            await linkWithRedirect(auth.currentUser, provider);
-          } else {
-            await linkWithPopup(auth.currentUser, provider);
-          }
-          alert("Synced! Your current data is now linked to Google.");
-          return;
-        }
-
-        alert("This account is already synced.");
-      } catch (error) {
-        console.error("Google sync failed:", error);
-        const popupFallbackCodes = [
-          "auth/popup-blocked",
-          "auth/popup-closed-by-user",
-          "auth/cancelled-popup-request",
-          "auth/operation-not-supported-in-this-environment"
-        ];
-
-        if (popupFallbackCodes.includes(error.code)) {
-          try {
-            const provider = new GoogleAuthProvider();
-
-            if (auth.currentUser && auth.currentUser.isAnonymous) {
-              await linkWithRedirect(auth.currentUser, provider);
-            } else {
-              await signInWithRedirect(auth, provider);
-            }
-            return;
-          } catch (redirectError) {
-            console.error("Google redirect sync failed:", redirectError);
-          }
-        }
-
-        if (error.code === "auth/credential-already-in-use") {
-          try {
-            const provider = new GoogleAuthProvider();
-            await signInWithPopup(auth, provider);
-            alert("Signed into your existing Google account.");
-            return;
-          } catch (signInError) {
-            console.error("Google sign-in after link conflict failed:", signInError);
-          }
-        }
-
-        const code = error && error.code ? error.code : "unknown-error";
-        const detail = error && error.message ? error.message : "No details";
-        alert("Google sign-in failed: " + code + "\n" + detail);
-      }
-    }
-
     async function signOutUser() {
       try {
         await signOut(auth);
-        await signInAnonymously(auth);
-        alert("Signed out. Switched to guest mode on this device.");
+        alert("Signed out.");
       } catch (error) {
         console.error("Sign out failed:", error);
         alert("Could not sign out. Try refreshing the page.");
@@ -648,10 +557,8 @@
       }
 
       try {
-        if (auth.currentUser && auth.currentUser.isAnonymous) {
-          const credential = EmailAuthProvider.credential(data.email, data.password);
-          await linkWithCredential(auth.currentUser, credential);
-          alert("Account created and linked. Your current data is now synced.");
+        if (auth.currentUser) {
+          alert("You are already signed in. Please sign out first if you want to create another account.");
           return;
         }
 
@@ -670,9 +577,6 @@
       }
 
       try {
-        if (auth.currentUser && auth.currentUser.isAnonymous) {
-          await signOut(auth);
-        }
         await signInWithEmailAndPassword(auth, data.email, data.password);
         alert("Signed in successfully.");
       } catch (error) {
@@ -771,7 +675,6 @@
 
     window.checkIn = checkIn;
     window.resetProgress = resetProgress;
-    window.connectGoogle = connectGoogle;
     window.signOutUser = signOutUser;
     window.signUpWithEmail = signUpWithEmail;
     window.signInWithEmail = signInWithEmail;
@@ -779,23 +682,22 @@
     updateCountdown();
     setInterval(updateCountdown, 1000);
 
-    signInAnonymously(auth)
-      .catch((error) => {
-        console.error(error);
-        document.getElementById("status").textContent =
-          "Firebase sign-in failed. Check Anonymous Auth.";
-      });
-
     onAuthStateChanged(auth, async (user) => {
       if (user) {
-        authUser = user;
         userId = user.uid;
         updateAuthUI(user);
         await loadUserData();
       } else {
-        authUser = null;
         userId = null;
+        currentStreak = 0;
+        bestStreak = 0;
+        lastCheckIn = null;
         updateAuthUI(null);
+        updateUI();
+        document.getElementById("historyContainer").innerHTML =
+          "<p class=\"history-empty\">Sign in to view your history.</p>";
+        document.getElementById("status").textContent =
+          "Please sign in with email and password.";
       }
     });
   </script>
