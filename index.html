@@ -560,6 +560,17 @@
           }
         }
 
+        if (error.code === "auth/credential-already-in-use") {
+          try {
+            const provider = new GoogleAuthProvider();
+            await signInWithPopup(auth, provider);
+            alert("Signed into your existing Google account.");
+            return;
+          } catch (signInError) {
+            console.error("Google sign-in after link conflict failed:", signInError);
+          }
+        }
+
         const code = error && error.code ? error.code : "unknown-error";
         const detail = error && error.message ? error.message : "No details";
         alert("Google sign-in failed: " + code + "\n" + detail);
