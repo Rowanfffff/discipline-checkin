@@ -480,6 +480,7 @@
 
     <div class="info-card">
       <p id="lastCheckIn">Last check-in: none</p>
+      <p id="disciplineDayInfo">Today's check-in date: loading...</p>
       <p id="countdown">Time left before streak reset: loading...</p>
     </div>
 
@@ -518,11 +519,22 @@
       </label>
     </div>
 
-    <button class="primary-btn" onclick="checkIn()">Check in today</button>
+    <button class="primary-btn" onclick="checkIn()">Success check-in (today)</button>
+    <button class="secondary-btn" onclick="recordFailToday()">Record failed day + self-check (today)</button>
+
+    <div class="review-card">
+      <h2 class="section-title">Make-up check-in (补救)</h2>
+      <p class="helper-text">Forgot a past day? Pick the date and record success or honest fail. Only success days grow your streak.</p>
+      <input id="makeupDate" class="auth-input" type="date">
+      <div class="auth-row">
+        <button class="secondary-btn" onclick="makeupSuccess()">Make-up success</button>
+        <button class="secondary-btn" onclick="makeupFail()">Make-up fail</button>
+      </div>
+    </div>
 
     <button class="danger-btn" onclick="resetProgress()">Reset / Fresh Start</button>
 
-    <p class="footer-note">Deadline: 12:30 AM every day</p>
+    <p class="footer-note">Each calendar day ends at midnight. Streak counts only consecutive success days.</p>
 
     <div class="history-card">
       <div class="history-header">
@@ -583,6 +595,8 @@
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
+    let lastSuccessCheckIn = null;
+    const MAKEUP_MAX_DAYS = 30;
 
     function getLocalDateString(date = new Date()) {
       const year = date.getFullYear();
@@ -591,36 +605,133 @@
       return year + "-" + month + "-" + day;
     }
 
-    function getYesterdayString() {
-      const date = new Date();
-      date.setDate(date.getDate() - 1);
-      return getLocalDateString(date);
-    }
-
     function getDateAtDayOffset(baseDate, offsetDays) {
       const date = new Date(baseDate);
       date.setDate(date.getDate() + offsetDays);
       return getLocalDateString(date);
     }
 
-    function isAfterTodayDeadline() {
-      const now = new Date();
-      const deadline = new Date();
-      deadline.setHours(0, 30, 0, 0);
-      return now > deadline;
+    function getEndOfCalendarDay(date = new Date()) {
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      return end;
     }
 
     function getNextDeadline() {
-      const now = new Date();
-      const deadline = new Date();
+      return getEndOfCalendarDay(new Date());
+    }
 
-      deadline.setHours(0, 30, 0, 0);
+    function parseDateString(dateStr) {
+      const parts = dateStr.split("-");
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
 
-      if (now > deadline) {
-        deadline.setDate(deadline.getDate() + 1);
+    function getPreviousDateString(dateStr) {
+      const date = parseDateString(dateStr);
+      date.setDate(date.getDate() - 1);
+      return getLocalDateString(date);
+    }
+
+    function setupMakeupDateInput() {
+      const input = document.getElementById("makeupDate");
+      if (!input) {
+        return;
+      }
+      const today = getLocalDateString();
+      const minDate = getDateAtDayOffset(new Date(), -MAKEUP_MAX_DAYS);
+      const yesterday = getDateAtDayOffset(new Date(), -1);
+      input.min = minDate;
+      input.max = yesterday;
+      input.value = yesterday;
+    }
+
+    function hasRecordForDate(dateStr) {
+      return recentRecords.some((record) => record.date === dateStr);
+    }
+
+    function getSelfCheckInput() {
+      const focusScore = Number(document.getElementById("focusScore").value);
+      const distractionMinutes = Number(document.getElementById("distractionMinutes").value);
+      const reflectionNote = document.getElementById("reflectionNote").value.trim();
+
+      if (!Number.isFinite(focusScore) || focusScore < 1 || focusScore > 10) {
+        alert("Focus score must be between 1 and 10.");
+        return null;
       }
 
-      return deadline;
+      if (!Number.isFinite(distractionMinutes) || distractionMinutes < 0 || distractionMinutes > 1440) {
+        alert("Distraction minutes must be between 0 and 1440.");
+        return null;
+      }
+
+      return {
+        focusScore: focusScore,
+        distractionMinutes: distractionMinutes,
+        reflectionNote: reflectionNote
+      };
+    }
+
+    function getRuleValues() {
+      return {
+        work: document.getElementById("work").checked,
+        noChinese: document.getElementById("noChinese").checked,
+        english: document.getElementById("english").checked
+      };
+    }
+
+    function recomputeCurrentStreak() {
+      const successDates = recentRecords
+        .filter((record) => record.success)
+        .map((record) => record.date)
+        .sort();
+
+      if (!successDates.length) {
+        currentStreak = 0;
+        lastSuccessCheckIn = null;
+        return;
+      }
+
+      let streak = 1;
+      let cursor = successDates[successDates.length - 1];
+
+      while (true) {
+        const previous = getPreviousDateString(cursor);
+        if (successDates.includes(previous)) {
+          streak++;
+          cursor = previous;
+        } else {
+          break;
+        }
+      }
+
+      currentStreak = streak;
+      lastSuccessCheckIn = successDates[successDates.length - 1];
+    }
+
+    function validateMakeupDate(dateStr) {
+      if (!dateStr) {
+        alert("Please choose a date for make-up check-in.");
+        return false;
+      }
+
+      const today = getLocalDateString();
+      if (dateStr >= today) {
+        alert("Make-up is only for past days. Use today's buttons for today.");
+        return false;
+      }
+
+      const minDate = getDateAtDayOffset(new Date(), -MAKEUP_MAX_DAYS);
+      if (dateStr < minDate) {
+        alert("Make-up is limited to the last " + MAKEUP_MAX_DAYS + " days.");
+        return false;
+      }
+
+      if (hasRecordForDate(dateStr)) {
+        alert("This date already has a record.");
+        return false;
+      }
+
+      return true;
     }
 
     function updateCountdown() {
@@ -634,8 +745,10 @@
       const seconds = Math.floor((diff / 1000) % 60);
 
       document.getElementById("countdown").textContent =
-        "Time left before streak reset: " +
+        "Time left today (before midnight): " +
         hours + "h " + minutes + "m " + seconds + "s";
+
+      updateDisciplineDayInfo(now);
     }
 
     function updateUI() {
@@ -645,8 +758,9 @@
       document.getElementById("bestStreak").textContent =
         bestStreak + " days";
 
+      const lastSuccessText = lastSuccessCheckIn || "none";
       document.getElementById("lastCheckIn").textContent =
-        "Last check-in: " + (lastCheckIn || "none");
+        "Last record: " + (lastCheckIn || "none") + " | Last success: " + lastSuccessText;
     }
 
     function setActionAvailability(isSignedIn) {
@@ -660,6 +774,8 @@
       if (focusEl) focusEl.disabled = disabled;
       if (distractionEl) distractionEl.disabled = disabled;
       if (noteEl) noteEl.disabled = disabled;
+      const makeupDateEl = document.getElementById("makeupDate");
+      if (makeupDateEl) makeupDateEl.disabled = disabled;
     }
 
     function updateAuthUI(user) {
@@ -677,29 +793,42 @@
       await setDoc(doc(db, "users", userId), {
         currentStreak: currentStreak,
         bestStreak: bestStreak,
-        lastCheckIn: lastCheckIn
+        lastCheckIn: lastCheckIn,
+        lastSuccessCheckIn: lastSuccessCheckIn
       }, { merge: true });
     }
 
-    function getAllowedPreviousCheckInDate(now = new Date()) {
-      // Before 12:30 AM, yesterday still counts for streak continuation.
-      if (!isAfterTodayDeadline()) {
-        return getDateAtDayOffset(now, -2);
+    async function saveCheckinRecord(dateStr, payload) {
+      const record = {
+        userId: userId,
+        date: dateStr,
+        work: payload.work,
+        noChinese: payload.noChinese,
+        english: payload.english,
+        focusScore: payload.focusScore,
+        distractionMinutes: payload.distractionMinutes,
+        reflectionNote: payload.reflectionNote,
+        success: payload.success,
+        isMakeup: !!payload.isMakeup,
+        createdAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, "checkins", userId + "_" + dateStr), record);
+
+      recentRecords = recentRecords.filter((item) => item.date !== dateStr);
+      recentRecords.push(record);
+      recentRecords.sort((a, b) => b.date.localeCompare(a.date));
+
+      lastCheckIn = dateStr;
+      recomputeCurrentStreak();
+
+      if (currentStreak > bestStreak) {
+        bestStreak = currentStreak;
       }
 
-      return getDateAtDayOffset(now, -1);
-    }
-
-    function getExpectedCheckInDate(now = new Date()) {
-      if (!isAfterTodayDeadline()) {
-        return getDateAtDayOffset(now, -1);
-      }
-
-      return getLocalDateString(now);
-    }
-
-    function isOnTimeContinuation(lastDate, now = new Date()) {
-      return lastDate === getAllowedPreviousCheckInDate(now);
+      await saveUserData();
+      updateUI();
+      await renderHistory();
     }
 
     async function renderHistory() {
@@ -775,11 +904,20 @@
       const badgeClass = data.success ? "" : " fail";
       const focus = typeof data.focusScore === "number" ? data.focusScore : "—";
       const distraction = typeof data.distractionMinutes === "number" ? data.distractionMinutes : "—";
-      const rules = [
+      const passed = [
         data.work ? "Study/work" : null,
         data.noChinese ? "No Chinese content" : null,
         data.english ? "English environment" : null
-      ].filter(Boolean).join(" · ") || "Rules not recorded";
+      ].filter(Boolean);
+      const failed = [
+        !data.work ? "Study/work" : null,
+        !data.noChinese ? "No Chinese content" : null,
+        !data.english ? "English environment" : null
+      ].filter(Boolean);
+      const rules = data.success
+        ? (passed.join(" · ") || "Rules not recorded")
+        : ("Missed: " + (failed.join(" · ") || "all rules"));
+      const makeupTag = data.isMakeup ? " · Make-up" : "";
       const note = data.reflectionNote && data.reflectionNote.trim()
         ? escapeHtml(data.reflectionNote.trim())
         : "";
@@ -790,7 +928,7 @@
       return (
         "<li class=\"history-item\">" +
         "<div class=\"history-top\">" +
-        "<span class=\"history-date\">" + data.date + "</span>" +
+        "<span class=\"history-date\">" + data.date + makeupTag + "</span>" +
         "<span class=\"history-badge" + badgeClass + "\">" + outcome + "</span>" +
         "</div>" +
         "<div class=\"history-metrics\">" +
@@ -860,22 +998,15 @@
       }
     }
 
-    async function applyMissedCheckInRule() {
-      const today = getLocalDateString();
-      const yesterday = getYesterdayString();
-
-      if (lastCheckIn === today) {
+    function updateDisciplineDayInfo(now = new Date()) {
+      const today = getLocalDateString(now);
+      const deadlineLine = document.getElementById("disciplineDayInfo");
+      if (!deadlineLine) {
         return;
       }
 
-      if (lastCheckIn === yesterday && !isAfterTodayDeadline()) {
-        return;
-      }
-
-      if (currentStreak !== 0) {
-        currentStreak = 0;
-        await saveUserData();
-      }
+      deadlineLine.textContent =
+        "Today: " + today + ". Success check-in before midnight keeps your streak. You can still record an honest fail with self-check.";
     }
 
     async function loadUserData() {
@@ -888,18 +1019,23 @@
         currentStreak = data.currentStreak || 0;
         bestStreak = data.bestStreak || 0;
         lastCheckIn = data.lastCheckIn || null;
+        lastSuccessCheckIn = data.lastSuccessCheckIn || null;
       } else {
         currentStreak = 0;
         bestStreak = 0;
         lastCheckIn = null;
+        lastSuccessCheckIn = null;
 
         await saveUserData();
       }
 
-      await applyMissedCheckInRule();
-
       updateUI();
       await renderHistory();
+      recomputeCurrentStreak();
+      if (userSnap.exists()) {
+        await saveUserData();
+      }
+      setupMakeupDateInput();
 
       document.getElementById("status").textContent =
         "Cloud data connected.";
@@ -968,76 +1104,139 @@
     }
 
     async function checkIn() {
-      const work = document.getElementById("work").checked;
-      const noChinese = document.getElementById("noChinese").checked;
-      const english = document.getElementById("english").checked;
-      const focusScore = Number(document.getElementById("focusScore").value);
-      const distractionMinutes = Number(document.getElementById("distractionMinutes").value);
-      const reflectionNote = document.getElementById("reflectionNote").value.trim();
-
-      if (!work || !noChinese || !english) {
-        alert("You need to complete all rules before checking in.");
-        return;
-      }
-
       if (!userId) {
         alert("Please sign in first.");
         return;
       }
 
-      if (!Number.isFinite(focusScore) || focusScore < 1 || focusScore > 10) {
-        alert("Focus score must be between 1 and 10.");
+      const rules = getRuleValues();
+      if (!rules.work || !rules.noChinese || !rules.english) {
+        alert("Complete all rules for a success check-in. If you did not meet them, use failed day + self-check.");
         return;
       }
 
-      if (!Number.isFinite(distractionMinutes) || distractionMinutes < 0 || distractionMinutes > 1440) {
-        alert("Distraction minutes must be between 0 and 1440.");
+      const selfCheck = getSelfCheckInput();
+      if (!selfCheck) {
         return;
       }
 
-      const now = new Date();
-      const checkInDate = getExpectedCheckInDate(now);
-
-      if (lastCheckIn === checkInDate) {
-        alert("You already checked in today.");
+      const today = getLocalDateString();
+      if (hasRecordForDate(today)) {
+        alert("Today already has a record.");
         return;
       }
 
-      if (!isOnTimeContinuation(lastCheckIn, now)) {
-        currentStreak = 0;
-      }
-
-      if (isOnTimeContinuation(lastCheckIn, now)) {
-        currentStreak++;
-      } else {
-        currentStreak = 1;
-      }
-
-      if (currentStreak > bestStreak) {
-        bestStreak = currentStreak;
-      }
-
-      lastCheckIn = checkInDate;
-
-      await saveUserData();
-
-      await setDoc(doc(db, "checkins", userId + "_" + checkInDate), {
-        userId: userId,
-        date: checkInDate,
-        work: work,
-        noChinese: noChinese,
-        english: english,
-        focusScore: focusScore,
-        distractionMinutes: distractionMinutes,
-        reflectionNote: reflectionNote,
+      await saveCheckinRecord(today, {
+        work: rules.work,
+        noChinese: rules.noChinese,
+        english: rules.english,
+        focusScore: selfCheck.focusScore,
+        distractionMinutes: selfCheck.distractionMinutes,
+        reflectionNote: selfCheck.reflectionNote,
         success: true,
-        createdAt: new Date().toISOString()
+        isMakeup: false
       });
 
-      updateUI();
-      await renderHistory();
+      alert("Success check-in saved. Streak updated.");
+    }
 
-      alert("Checked in successfully!");
+    async function recordFailToday() {
+      if (!userId) {
+        alert("Please sign in first.");
+        return;
+      }
+
+      const selfCheck = getSelfCheckInput();
+      if (!selfCheck) {
+        return;
+      }
+
+      const today = getLocalDateString();
+      if (hasRecordForDate(today)) {
+        alert("Today already has a record.");
+        return;
+      }
+
+      const rules = getRuleValues();
+      await saveCheckinRecord(today, {
+        work: rules.work,
+        noChinese: rules.noChinese,
+        english: rules.english,
+        focusScore: selfCheck.focusScore,
+        distractionMinutes: selfCheck.distractionMinutes,
+        reflectionNote: selfCheck.reflectionNote,
+        success: false,
+        isMakeup: false
+      });
+
+      alert("Failed day recorded with self-check. This day does not add to your streak.");
+    }
+
+    async function makeupSuccess() {
+      if (!userId) {
+        alert("Please sign in first.");
+        return;
+      }
+
+      const dateStr = document.getElementById("makeupDate").value;
+      if (!validateMakeupDate(dateStr)) {
+        return;
+      }
+
+      const rules = getRuleValues();
+      if (!rules.work || !rules.noChinese || !rules.english) {
+        alert("Make-up success requires all rules completed for that day.");
+        return;
+      }
+
+      const selfCheck = getSelfCheckInput();
+      if (!selfCheck) {
+        return;
+      }
+
+      await saveCheckinRecord(dateStr, {
+        work: rules.work,
+        noChinese: rules.noChinese,
+        english: rules.english,
+        focusScore: selfCheck.focusScore,
+        distractionMinutes: selfCheck.distractionMinutes,
+        reflectionNote: selfCheck.reflectionNote,
+        success: true,
+        isMakeup: true
+      });
+
+      alert("Make-up success saved for " + dateStr + ".");
+    }
+
+    async function makeupFail() {
+      if (!userId) {
+        alert("Please sign in first.");
+        return;
+      }
+
+      const dateStr = document.getElementById("makeupDate").value;
+      if (!validateMakeupDate(dateStr)) {
+        return;
+      }
+
+      const selfCheck = getSelfCheckInput();
+      if (!selfCheck) {
+        return;
+      }
+
+      const rules = getRuleValues();
+      await saveCheckinRecord(dateStr, {
+        work: rules.work,
+        noChinese: rules.noChinese,
+        english: rules.english,
+        focusScore: selfCheck.focusScore,
+        distractionMinutes: selfCheck.distractionMinutes,
+        reflectionNote: selfCheck.reflectionNote,
+        success: false,
+        isMakeup: true
+      });
+
+      alert("Make-up fail saved for " + dateStr + ".");
     }
 
     async function resetProgress() {
@@ -1056,6 +1255,7 @@
 
       currentStreak = 0;
       lastCheckIn = null;
+      lastSuccessCheckIn = null;
 
       await saveUserData();
 
@@ -1072,6 +1272,9 @@
     }
 
     window.checkIn = checkIn;
+    window.recordFailToday = recordFailToday;
+    window.makeupSuccess = makeupSuccess;
+    window.makeupFail = makeupFail;
     window.resetProgress = resetProgress;
     window.signOutUser = signOutUser;
     window.signUpWithEmail = signUpWithEmail;
@@ -1079,6 +1282,7 @@
     window.toggleHistoryMode = toggleHistoryMode;
 
     setActionAvailability(false);
+    setupMakeupDateInput();
     renderWeeklySummary();
     updateCountdown();
     setInterval(updateCountdown, 1000);
@@ -1096,6 +1300,7 @@
         currentStreak = 0;
         bestStreak = 0;
         lastCheckIn = null;
+        lastSuccessCheckIn = null;
         updateAuthUI(null);
         setActionAvailability(false);
         updateUI();
