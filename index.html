@@ -524,11 +524,11 @@
 
     <div class="review-card">
       <h2 class="section-title">Make-up check-in (补救)</h2>
-      <p class="helper-text">Forgot a past day? Pick the date and record success or honest fail. Only success days grow your streak.</p>
+      <p class="helper-text">Forgot a past day? Pick the date, fill self-check below, then submit. Make-up success needs all rules + self-check. Make-up fail needs self-check only.</p>
       <input id="makeupDate" class="auth-input" type="date">
       <div class="auth-row">
-        <button class="secondary-btn" onclick="makeupSuccess()">Make-up success</button>
-        <button class="secondary-btn" onclick="makeupFail()">Make-up fail</button>
+        <button class="secondary-btn" onclick="makeupSuccess()">Make-up success (rules + self-check)</button>
+        <button class="secondary-btn" onclick="makeupFail()">Make-up fail (self-check)</button>
       </div>
     </div>
 
@@ -661,6 +661,11 @@
 
       if (!Number.isFinite(distractionMinutes) || distractionMinutes < 0 || distractionMinutes > 1440) {
         alert("Distraction minutes must be between 0 and 1440.");
+        return null;
+      }
+
+      if (!reflectionNote) {
+        alert("Please write a reflection note for your self-check.");
         return null;
       }
 
