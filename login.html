@@ -69,7 +69,7 @@
   <div class="login-card">
     <a id="backLink" class="back-link" href="index.html">← Back</a>
     <h1>Sign in</h1>
-    <p class="subtitle">Use one account on all devices</p>
+    <p class="subtitle">Sign in once for Check-in and Task Plan</p>
 
     <label for="emailInput">Email</label>
     <input id="emailInput" type="email" autocomplete="username" placeholder="you@email.com">
@@ -84,26 +84,12 @@
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
     import {
-      getAuth,
       onAuthStateChanged,
       createUserWithEmailAndPassword,
       signInWithEmailAndPassword
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyA-Edt2MC8yZiHI_WRQKte5VEncEUIP1L4",
-      authDomain: "daily-check-in-86968.firebaseapp.com",
-      projectId: "daily-check-in-86968",
-      storageBucket: "daily-check-in-86968.firebasestorage.app",
-      messagingSenderId: "1063521708690",
-      appId: "1:1063521708690:web:1bad506bb31982d0a2d44b",
-      measurementId: "G-55SNKVD5B7"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+    import { auth, waitForAuthReady } from "./firebase-shared.js";
 
     const params = new URLSearchParams(window.location.search);
     const allowedReturns = ["index.html", "plan.html"];
@@ -161,6 +147,11 @@
 
     window.signInWithEmail = signInWithEmail;
     window.signUpWithEmail = signUpWithEmail;
+
+    await waitForAuthReady();
+    if (auth.currentUser) {
+      goBack();
+    }
 
     onAuthStateChanged(auth, (user) => {
       if (user) {

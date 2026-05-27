@@ -915,16 +915,12 @@
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-
     import {
-      getAuth,
       onAuthStateChanged,
       signOut
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
     import {
-      getFirestore,
       doc,
       getDoc,
       setDoc,
@@ -934,19 +930,7 @@
       getDocs
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyA-Edt2MC8yZiHI_WRQKte5VEncEUIP1L4",
-      authDomain: "daily-check-in-86968.firebaseapp.com",
-      projectId: "daily-check-in-86968",
-      storageBucket: "daily-check-in-86968.firebasestorage.app",
-      messagingSenderId: "1063521708690",
-      appId: "1:1063521708690:web:1bad506bb31982d0a2d44b",
-      measurementId: "G-55SNKVD5B7"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    import { auth, db, waitForAuthReady } from "./firebase-shared.js";
 
     let userId = null;
     let recentRecords = [];
@@ -1972,6 +1956,8 @@
         renderPeriodSummary();
       }
     });
+
+    await waitForAuthReady();
 
     onAuthStateChanged(auth, async (user) => {
       try {
