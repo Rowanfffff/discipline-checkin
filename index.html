@@ -625,19 +625,42 @@
       gap: 10px;
       background: white;
       border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 10px 12px;
+      border-radius: 14px;
+      padding: 12px;
       font-size: 14px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
     }
 
     .plan-item.important {
       border-color: #93c5fd;
-      background: #eff6ff;
+      background: linear-gradient(180deg, #eff6ff, #ffffff);
     }
 
-    .plan-item.done span {
+    .plan-item.done .plan-card-text {
       text-decoration: line-through;
       color: var(--text-muted);
+    }
+
+    .plan-card-text {
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    .plan-move-btns {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .plan-move-btns button {
+      margin-top: 0;
+      width: 34px;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+
+    #planStatus.error {
+      color: #b91c1c;
     }
 
     .plan-badge {
@@ -783,29 +806,20 @@
     </section>
 
     <section id="panel-plan" class="app-panel">
-    <div class="review-card" id="todayPlanCard" style="margin-top:0;">
-      <h2 class="section-title">Today's plan</h2>
-      <p class="helper-text">Important tasks stay on top. Shuffle randomizes the rest.</p>
-      <ul id="todayPlanList" class="plan-list"></ul>
-      <div class="plan-actions">
-        <button class="secondary-btn" type="button" onclick="shuffleTodayPlan()">Shuffle order</button>
-      </div>
-    </div>
-
-    <div class="review-card">
-      <h2 class="section-title">Plan for tomorrow</h2>
-      <p class="helper-text">Add tasks tonight. Tomorrow they appear in Today's plan. Mark important to keep first after shuffle.</p>
+    <div class="review-card" style="margin-top:0;">
+      <h2 class="section-title">Task cards</h2>
+      <p id="planStatus" class="helper-text">Add cards anytime. They save to cloud and stay after refresh.</p>
       <div class="plan-add-row">
-        <input id="tomorrowPlanText" class="auth-input" type="text" placeholder="Task for tomorrow">
+        <input id="planCardText" class="auth-input" type="text" placeholder="New task card">
         <label class="plan-important-label">
-          <input id="tomorrowPlanImportant" type="checkbox">
+          <input id="planCardImportant" type="checkbox">
           Important
         </label>
       </div>
-      <button class="secondary-btn" type="button" onclick="addTomorrowPlanItem()">Add task</button>
-      <ul id="tomorrowPlanList" class="plan-list"></ul>
+      <button class="secondary-btn" type="button" onclick="addPlanCard()">Add card</button>
+      <ul id="planBoardList" class="plan-list"></ul>
       <div class="plan-actions">
-        <button class="secondary-btn" type="button" onclick="shuffleTomorrowPlan()">Shuffle order</button>
+        <button class="secondary-btn" type="button" onclick="shufflePlanBoard()">Shuffle (important first)</button>
       </div>
     </div>
     </section>
@@ -914,8 +928,8 @@
     let summaryPeriodOffset = 0;
     let historyFilter = "all";
     let activeAppPage = "checkin";
-    let todayPlanItems = [];
-    let tomorrowPlanItems = [];
+    let planBoardItems = [];
+    const PLAN_BOARD_ID = "board";
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
@@ -1105,10 +1119,19 @@
       if (noteEl) noteEl.disabled = disabled;
       const makeupDateEl = document.getElementById("makeupDate");
       if (makeupDateEl) makeupDateEl.disabled = disabled;
-      const tomorrowPlanText = document.getElementById("tomorrowPlanText");
-      const tomorrowPlanImportant = document.getElementById("tomorrowPlanImportant");
-      if (tomorrowPlanText) tomorrowPlanText.disabled = disabled;
-      if (tomorrowPlanImportant) tomorrowPlanImportant.disabled = disabled;
+      const planCardText = document.getElementById("planCardText");
+      const planCardImportant = document.getElementById("planCardImportant");
+      if (planCardText) planCardText.disabled = disabled;
+      if (planCardImportant) planCardImportant.disabled = disabled;
+    }
+
+    function setPlanStatus(message, isError) {
+      const planStatus = document.getElementById("planStatus");
+      if (!planStatus) {
+        return;
+      }
+      planStatus.textContent = message;
+      planStatus.classList.toggle("error", !!isError);
     }
 
     function createPlanItemId() {
@@ -1140,92 +1163,123 @@
       }));
     }
 
-    async function loadPlanForDate(dateStr) {
-      const planRef = doc(db, "plans", userId + "_" + dateStr);
+    async function loadPlanDoc(docSuffix) {
+      const planRef = doc(db, "plans", userId + "_" + docSuffix);
       const planSnap = await getDoc(planRef);
       if (!planSnap.exists()) {
         return [];
       }
-      const data = planSnap.data();
-      return sortPlanItems(data.items || []);
+      return sortPlanItems(planSnap.data().items || []);
     }
 
-    async function savePlanForDate(dateStr, items) {
-      await setDoc(doc(db, "plans", userId + "_" + dateStr), {
-        userId: userId,
-        date: dateStr,
-        items: items,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-    }
-
-    function renderPlanList(containerId, items, options) {
-      const container = document.getElementById(containerId);
-      if (!items.length) {
-        container.innerHTML = "<p class=\"history-empty\">No tasks yet.</p>";
-        return;
+    async function savePlanBoard() {
+      try {
+        await setDoc(doc(db, "plans", userId + "_" + PLAN_BOARD_ID), {
+          userId: userId,
+          boardType: "active",
+          items: planBoardItems,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        setPlanStatus("Saved to cloud. Last update: " + new Date().toLocaleTimeString(), false);
+      } catch (error) {
+        console.error("Plan save failed:", error);
+        setPlanStatus("Save failed. Check Firestore rules for plans collection.", true);
+        alert("Could not save task cards: " + (error.code || error.message));
+        throw error;
       }
-
-      const sorted = sortPlanItems(items);
-      container.innerHTML = sorted.map((item, index) => {
-        const importantClass = item.important ? " important" : "";
-        const doneClass = item.done ? " done" : "";
-        const badge = item.important ? "<span class=\"plan-badge\">Important</span>" : "";
-        const orderLabel = "<span class=\"plan-badge\" style=\"background:#f1f5f9;color:#475569;\">#" + (index + 1) + "</span>";
-
-        let leftControl = "";
-        if (options.allowDone) {
-          leftControl = "<input type=\"checkbox\" " + (item.done ? "checked" : "") + " onchange=\"toggleTodayPlanDone('" + item.id + "')\">";
-        }
-
-        const removeBtn = "<button class=\"mini-btn\" type=\"button\" onclick=\"" + options.removeHandler + "('" + item.id + "')\">Remove</button>";
-
-        return (
-          "<li class=\"plan-item" + importantClass + doneClass + "\">" +
-          leftControl +
-          orderLabel +
-          badge +
-          "<span style=\"flex:1;\">" + escapeHtml(item.text) + "</span>" +
-          removeBtn +
-          "</li>"
-        );
-      }).join("");
     }
 
-    function renderPlanSections() {
-      renderPlanList("todayPlanList", todayPlanItems, {
-        allowDone: true,
-        removeHandler: "removeTodayPlanItem"
-      });
-      renderPlanList("tomorrowPlanList", tomorrowPlanItems, {
-        allowDone: false,
-        removeHandler: "removeTomorrowPlanItem"
-      });
-    }
-
-    async function loadPlans() {
-      if (!userId) {
-        todayPlanItems = [];
-        tomorrowPlanItems = [];
-        renderPlanSections();
+    async function migrateOldPlansIfNeeded() {
+      if (planBoardItems.length) {
         return;
       }
 
       const today = getLocalDateString();
       const tomorrow = getDateAtDayOffset(new Date(), 1);
-      todayPlanItems = await loadPlanForDate(today);
-      tomorrowPlanItems = await loadPlanForDate(tomorrow);
-      renderPlanSections();
+      const oldToday = await loadPlanDoc(today);
+      const oldTomorrow = await loadPlanDoc(tomorrow);
+      const merged = [...oldToday, ...oldTomorrow];
+      if (!merged.length) {
+        return;
+      }
+
+      const seen = new Set();
+      planBoardItems = merged.filter((item) => {
+        if (seen.has(item.id)) {
+          return false;
+        }
+        seen.add(item.id);
+        return true;
+      }).map((item, index) => ({ ...item, order: index }));
+
+      await savePlanBoard();
     }
 
-    async function addTomorrowPlanItem() {
+    function renderPlanBoard() {
+      const container = document.getElementById("planBoardList");
+      if (!container) {
+        return;
+      }
+
+      if (!planBoardItems.length) {
+        container.innerHTML = "<p class=\"history-empty\">No cards yet. Add your first task card above.</p>";
+        return;
+      }
+
+      const sorted = sortPlanItems(planBoardItems);
+      container.innerHTML = sorted.map((item, index) => {
+        const importantClass = item.important ? " important" : "";
+        const doneClass = item.done ? " done" : "";
+        const badge = item.important ? "<span class=\"plan-badge\">Important</span>" : "";
+        const orderLabel = "<span class=\"plan-badge\" style=\"background:#f1f5f9;color:#475569;\">#" + (index + 1) + "</span>";
+        const upDisabled = index === 0 ? " disabled" : "";
+        const downDisabled = index === sorted.length - 1 ? " disabled" : "";
+
+        return (
+          "<li class=\"plan-item" + importantClass + doneClass + "\">" +
+          "<div class=\"plan-move-btns\">" +
+          "<button class=\"mini-btn\" type=\"button\"" + upDisabled + " onclick=\"movePlanCard('" + item.id + "', -1)\">↑</button>" +
+          "<button class=\"mini-btn\" type=\"button\"" + downDisabled + " onclick=\"movePlanCard('" + item.id + "', 1)\">↓</button>" +
+          "</div>" +
+          "<input type=\"checkbox\" " + (item.done ? "checked" : "") + " onchange=\"togglePlanCardDone('" + item.id + "')\">" +
+          orderLabel +
+          badge +
+          "<span class=\"plan-card-text\">" + escapeHtml(item.text) + "</span>" +
+          "<button class=\"mini-btn\" type=\"button\" onclick=\"removePlanCard('" + item.id + "')\">Remove</button>" +
+          "</li>"
+        );
+      }).join("");
+    }
+
+    async function loadPlans() {
+      if (!userId) {
+        planBoardItems = [];
+        renderPlanBoard();
+        setPlanStatus("Sign in to use task cards.", false);
+        return;
+      }
+
+      try {
+        planBoardItems = await loadPlanDoc(PLAN_BOARD_ID);
+        await migrateOldPlansIfNeeded();
+        renderPlanBoard();
+        setPlanStatus("Loaded " + planBoardItems.length + " card(s) from cloud.", false);
+      } catch (error) {
+        console.error("Plan load failed:", error);
+        planBoardItems = [];
+        renderPlanBoard();
+        setPlanStatus("Load failed. Check Firestore rules for plans collection.", true);
+      }
+    }
+
+    async function addPlanCard() {
       if (!userId) {
         alert("Please sign in first.");
         return;
       }
 
-      const textInput = document.getElementById("tomorrowPlanText");
-      const importantInput = document.getElementById("tomorrowPlanImportant");
+      const textInput = document.getElementById("planCardText");
+      const importantInput = document.getElementById("planCardImportant");
       const text = textInput.value.trim();
 
       if (!text) {
@@ -1233,70 +1287,67 @@
         return;
       }
 
-      const tomorrow = getDateAtDayOffset(new Date(), 1);
-      tomorrowPlanItems.push({
+      planBoardItems.push({
         id: createPlanItemId(),
         text: text,
         important: importantInput.checked,
         done: false,
-        order: tomorrowPlanItems.length
+        order: planBoardItems.length
       });
 
-      tomorrowPlanItems = sortPlanItems(tomorrowPlanItems);
-      await savePlanForDate(tomorrow, tomorrowPlanItems);
+      planBoardItems = sortPlanItems(planBoardItems);
+      await savePlanBoard();
       textInput.value = "";
       importantInput.checked = false;
-      renderPlanSections();
+      renderPlanBoard();
     }
 
-    async function removeTomorrowPlanItem(itemId) {
-      const tomorrow = getDateAtDayOffset(new Date(), 1);
-      tomorrowPlanItems = tomorrowPlanItems.filter((item) => item.id !== itemId)
+    async function removePlanCard(itemId) {
+      planBoardItems = planBoardItems.filter((item) => item.id !== itemId)
         .map((item, index) => ({ ...item, order: index }));
-      await savePlanForDate(tomorrow, tomorrowPlanItems);
-      renderPlanSections();
+      await savePlanBoard();
+      renderPlanBoard();
     }
 
-    async function removeTodayPlanItem(itemId) {
-      const today = getLocalDateString();
-      todayPlanItems = todayPlanItems.filter((item) => item.id !== itemId)
-        .map((item, index) => ({ ...item, order: index }));
-      await savePlanForDate(today, todayPlanItems);
-      renderPlanSections();
-    }
-
-    async function shuffleTomorrowPlan() {
-      if (!tomorrowPlanItems.length) {
-        alert("Add tasks first.");
+    async function movePlanCard(itemId, direction) {
+      const sorted = sortPlanItems(planBoardItems);
+      const index = sorted.findIndex((item) => item.id === itemId);
+      if (index < 0) {
         return;
       }
-      const tomorrow = getDateAtDayOffset(new Date(), 1);
-      tomorrowPlanItems = shufflePlanItems(tomorrowPlanItems);
-      await savePlanForDate(tomorrow, tomorrowPlanItems);
-      renderPlanSections();
-    }
 
-    async function shuffleTodayPlan() {
-      if (!todayPlanItems.length) {
-        alert("No tasks in today's plan.");
+      const newIndex = index + direction;
+      if (newIndex < 0 || newIndex >= sorted.length) {
         return;
       }
-      const today = getLocalDateString();
-      todayPlanItems = shufflePlanItems(todayPlanItems);
-      await savePlanForDate(today, todayPlanItems);
-      renderPlanSections();
+
+      const reordered = [...sorted];
+      const moved = reordered.splice(index, 1)[0];
+      reordered.splice(newIndex, 0, moved);
+      planBoardItems = reordered.map((item, idx) => ({ ...item, order: idx }));
+      await savePlanBoard();
+      renderPlanBoard();
     }
 
-    async function toggleTodayPlanDone(itemId) {
-      const today = getLocalDateString();
-      todayPlanItems = todayPlanItems.map((item) => {
+    async function shufflePlanBoard() {
+      if (!planBoardItems.length) {
+        alert("Add cards first.");
+        return;
+      }
+      planBoardItems = shufflePlanItems(planBoardItems);
+      await savePlanBoard();
+      renderPlanBoard();
+    }
+
+    async function togglePlanCardDone(itemId) {
+      planBoardItems = planBoardItems.map((item) => {
         if (item.id === itemId) {
           return { ...item, done: !item.done };
         }
         return item;
       });
-      await savePlanForDate(today, todayPlanItems);
-      renderPlanSections();
+      await savePlanBoard();
+      renderPlanBoard();
     }
 
     function updateAuthUI(user) {
@@ -1567,7 +1618,7 @@
       }
 
       if (page === "plan") {
-        renderPlanSections();
+        renderPlanBoard();
       }
     }
 
@@ -2157,12 +2208,11 @@
     window.exportDataJson = exportDataJson;
     window.exportDataCsv = exportDataCsv;
     window.setAppPage = setAppPage;
-    window.addTomorrowPlanItem = addTomorrowPlanItem;
-    window.removeTomorrowPlanItem = removeTomorrowPlanItem;
-    window.removeTodayPlanItem = removeTodayPlanItem;
-    window.shuffleTomorrowPlan = shuffleTomorrowPlan;
-    window.shuffleTodayPlan = shuffleTodayPlan;
-    window.toggleTodayPlanDone = toggleTodayPlanDone;
+    window.addPlanCard = addPlanCard;
+    window.removePlanCard = removePlanCard;
+    window.movePlanCard = movePlanCard;
+    window.shufflePlanBoard = shufflePlanBoard;
+    window.togglePlanCardDone = togglePlanCardDone;
 
     setActionAvailability(false);
     setupMakeupDateInput();
@@ -2189,9 +2239,9 @@
         showAllHistory = false;
         historyFilter = "all";
         updateHistoryFilterTabs();
-        todayPlanItems = [];
-        tomorrowPlanItems = [];
-        renderPlanSections();
+        planBoardItems = [];
+        renderPlanBoard();
+        setPlanStatus("Sign in to use task cards.", false);
         currentStreak = 0;
         bestStreak = 0;
         lastCheckIn = null;
