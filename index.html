@@ -371,13 +371,72 @@
     }
 
     .history-item {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 10px;
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .history-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .history-date {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .history-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .history-badge.fail {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .history-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .history-metric {
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 4px 8px;
+    }
+
+    .history-rules {
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+
+    .history-note {
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.45;
+      margin: 0;
+      white-space: pre-wrap;
+    }
+
+    .history-note.empty {
+      color: var(--text-muted);
+      font-style: italic;
     }
 
     .history-empty {
@@ -691,15 +750,7 @@
       }
 
       const rows = showAllHistory ? recentRecords : recentRecords.slice(0, 14);
-      const items = rows.map((data) => {
-          const outcome = data.success ? "Success" : "Failed";
-          return (
-            "<li class=\"history-item\">" +
-            "<span>" + data.date + "</span>" +
-            "<span>" + outcome + "</span>" +
-            "</li>"
-          );
-      }).join("");
+      const items = rows.map((data) => formatHistoryRecord(data)).join("");
 
       historyContainer.innerHTML = "<ul class=\"history-list\">" + items + "</ul>";
       toggleBtn.textContent = showAllHistory ? "Show recent" : "Show all";
@@ -708,6 +759,48 @@
     function toggleHistoryMode() {
       showAllHistory = !showAllHistory;
       renderHistoryList();
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function formatHistoryRecord(data) {
+      const outcome = data.success ? "Success" : "Failed";
+      const badgeClass = data.success ? "" : " fail";
+      const focus = typeof data.focusScore === "number" ? data.focusScore : "—";
+      const distraction = typeof data.distractionMinutes === "number" ? data.distractionMinutes : "—";
+      const rules = [
+        data.work ? "Study/work" : null,
+        data.noChinese ? "No Chinese content" : null,
+        data.english ? "English environment" : null
+      ].filter(Boolean).join(" · ") || "Rules not recorded";
+      const note = data.reflectionNote && data.reflectionNote.trim()
+        ? escapeHtml(data.reflectionNote.trim())
+        : "";
+      const noteHtml = note
+        ? "<p class=\"history-note\">" + note + "</p>"
+        : "<p class=\"history-note empty\">No reflection note for this day.</p>";
+
+      return (
+        "<li class=\"history-item\">" +
+        "<div class=\"history-top\">" +
+        "<span class=\"history-date\">" + data.date + "</span>" +
+        "<span class=\"history-badge" + badgeClass + "\">" + outcome + "</span>" +
+        "</div>" +
+        "<div class=\"history-metrics\">" +
+        "<span class=\"history-metric\">Focus: " + focus + "/10</span>" +
+        "<span class=\"history-metric\">Distraction: " + distraction + " min</span>" +
+        "</div>" +
+        "<div class=\"history-rules\">" + rules + "</div>" +
+        noteHtml +
+        "</li>"
+      );
     }
 
     function renderWeeklySummary() {
