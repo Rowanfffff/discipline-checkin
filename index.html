@@ -148,6 +148,45 @@
       font-size: 13px;
       color: #6b7280;
     }
+
+    .history-card {
+      margin-top: 18px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .history-title {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+    }
+
+    .history-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .history-empty {
+      font-size: 14px;
+      color: #6b7280;
+      margin: 0;
+    }
   </style>
 </head>
 
@@ -197,6 +236,13 @@
     <button class="danger-btn" onclick="resetProgress()">Reset / Fresh Start</button>
 
     <p class="footer-note">Deadline: 12:30 AM every day</p>
+
+    <div class="history-card">
+      <h2 class="history-title">Recent check-in history</h2>
+      <div id="historyContainer">
+        <p class="history-empty">Loading your records...</p>
+      </div>
+    </div>
   </div>
 
   <script type="module">
@@ -212,7 +258,11 @@
       getFirestore,
       doc,
       getDoc,
-      setDoc
+      setDoc,
+      collection,
+      query,
+      where,
+      getDocs
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -244,6 +294,12 @@
     function getYesterdayString() {
       const date = new Date();
       date.setDate(date.getDate() - 1);
+      return getLocalDateString(date);
+    }
+
+    function getDateAtDayOffset(baseDate, offsetDays) {
+      const date = new Date(baseDate);
+      date.setDate(date.getDate() + offsetDays);
       return getLocalDateString(date);
     }
 
@@ -301,6 +357,60 @@
       }, { merge: true });
     }
 
+    function getAllowedPreviousCheckInDate(now = new Date()) {
+      // Before 12:30 AM, yesterday still counts for streak continuation.
+      if (!isAfterTodayDeadline()) {
+        return getDateAtDayOffset(now, -2);
+      }
+
+      return getDateAtDayOffset(now, -1);
+    }
+
+    function getExpectedCheckInDate(now = new Date()) {
+      if (!isAfterTodayDeadline()) {
+        return getDateAtDayOffset(now, -1);
+      }
+
+      return getLocalDateString(now);
+    }
+
+    function isOnTimeContinuation(lastDate, now = new Date()) {
+      return lastDate === getAllowedPreviousCheckInDate(now);
+    }
+
+    async function renderHistory() {
+      const historyContainer = document.getElementById("historyContainer");
+
+      const q = query(
+        collection(db, "checkins"),
+        where("userId", "==", userId)
+      );
+
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        historyContainer.innerHTML = "<p class=\"history-empty\">No history yet. Start with your first check-in today.</p>";
+        return;
+      }
+
+      const sortedHistory = snap.docs
+        .map((docSnap) => docSnap.data())
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 14);
+
+      const items = sortedHistory.map((data) => {
+        const outcome = data.success ? "Success" : "Failed";
+        return (
+          "<li class=\"history-item\">" +
+          "<span>" + data.date + "</span>" +
+          "<span>" + outcome + "</span>" +
+          "</li>"
+        );
+      }).join("");
+
+      historyContainer.innerHTML = "<ul class=\"history-list\">" + items + "</ul>";
+    }
+
     async function applyMissedCheckInRule() {
       const today = getLocalDateString();
       const yesterday = getYesterdayString();
@@ -340,6 +450,7 @@
       await applyMissedCheckInRule();
 
       updateUI();
+      await renderHistory();
 
       document.getElementById("status").textContent =
         "Cloud data connected.";
@@ -360,15 +471,19 @@
         return;
       }
 
-      const today = getLocalDateString();
-      const yesterday = getYesterdayString();
+      const now = new Date();
+      const checkInDate = getExpectedCheckInDate(now);
 
-      if (lastCheckIn === today) {
+      if (lastCheckIn === checkInDate) {
         alert("You already checked in today.");
         return;
       }
 
-      if (lastCheckIn === yesterday) {
+      if (!isOnTimeContinuation(lastCheckIn, now)) {
+        currentStreak = 0;
+      }
+
+      if (isOnTimeContinuation(lastCheckIn, now)) {
         currentStreak++;
       } else {
         currentStreak = 1;
@@ -378,13 +493,13 @@
         bestStreak = currentStreak;
       }
 
-      lastCheckIn = today;
+      lastCheckIn = checkInDate;
 
       await saveUserData();
 
-      await setDoc(doc(db, "checkins", userId + "_" + today), {
+      await setDoc(doc(db, "checkins", userId + "_" + checkInDate), {
         userId: userId,
-        date: today,
+        date: checkInDate,
         work: work,
         noChinese: noChinese,
         english: english,
@@ -393,6 +508,7 @@
       });
 
       updateUI();
+      await renderHistory();
 
       alert("Checked in successfully!");
     }
@@ -423,6 +539,7 @@
       });
 
       updateUI();
+      await renderHistory();
 
       alert("Progress reset. You can start fresh now.");
     }
