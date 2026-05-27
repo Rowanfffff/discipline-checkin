@@ -560,7 +560,9 @@
           }
         }
 
-        alert("Google sign-in failed. Please check Firebase Google Auth setup and try again.");
+        const code = error && error.code ? error.code : "unknown-error";
+        const detail = error && error.message ? error.message : "No details";
+        alert("Google sign-in failed: " + code + "\n" + detail);
       }
     }
 
