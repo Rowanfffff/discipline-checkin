@@ -292,7 +292,9 @@
       GoogleAuthProvider,
       signInWithPopup,
       linkWithPopup,
-      signOut
+      signOut,
+      signInWithRedirect,
+      linkWithRedirect
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
     import {
@@ -536,7 +538,29 @@
         alert("This account is already synced.");
       } catch (error) {
         console.error("Google sync failed:", error);
-        alert("Google sign-in failed. Enable Google provider in Firebase Auth and try again.");
+        const popupFallbackCodes = [
+          "auth/popup-blocked",
+          "auth/popup-closed-by-user",
+          "auth/cancelled-popup-request",
+          "auth/operation-not-supported-in-this-environment"
+        ];
+
+        if (popupFallbackCodes.includes(error.code)) {
+          try {
+            const provider = new GoogleAuthProvider();
+
+            if (auth.currentUser && auth.currentUser.isAnonymous) {
+              await linkWithRedirect(auth.currentUser, provider);
+            } else {
+              await signInWithRedirect(auth, provider);
+            }
+            return;
+          } catch (redirectError) {
+            console.error("Google redirect sync failed:", redirectError);
+          }
+        }
+
+        alert("Google sign-in failed. Please check Firebase Google Auth setup and try again.");
       }
     }
 
