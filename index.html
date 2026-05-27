@@ -542,6 +542,66 @@
       color: var(--text-muted);
       margin: 0;
     }
+
+    .app-menu {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .app-menu-btn {
+      border: 1px solid var(--line);
+      background: var(--surface-soft);
+      color: var(--text-main);
+      border-radius: 12px;
+      padding: 12px 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .app-menu-btn.active {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1e40af;
+    }
+
+    .app-panel {
+      display: none;
+    }
+
+    .app-panel.active {
+      display: block;
+    }
+
+    .history-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+
+    .history-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex: 1;
+    }
+
+    .export-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .export-row button {
+      margin-top: 0;
+      flex: 1;
+    }
   </style>
 </head>
 
@@ -576,6 +636,13 @@
       </div>
     </div>
 
+    <nav class="app-menu" aria-label="Main sections">
+      <button id="menu-checkin" class="app-menu-btn active" type="button" onclick="setAppPage('checkin')">Check-in</button>
+      <button id="menu-history" class="app-menu-btn" type="button" onclick="setAppPage('history')">History</button>
+      <button id="menu-summary" class="app-menu-btn" type="button" onclick="setAppPage('summary')">Summary</button>
+    </nav>
+
+    <section id="panel-checkin" class="app-panel active">
     <div class="info-card">
       <p id="lastCheckIn">Last check-in: none</p>
       <p id="disciplineDayInfo">Today's check-in date: loading...</p>
@@ -633,18 +700,36 @@
     <button class="danger-btn" onclick="resetProgress()">Reset / Fresh Start</button>
 
     <p class="footer-note">Each calendar day ends at midnight. Streak counts only consecutive success days.</p>
+    </section>
 
-    <div class="history-card">
+    <section id="panel-history" class="app-panel">
+    <div class="history-card" style="margin-top:0;">
       <div class="history-header">
         <h2 class="history-title">Check-in history</h2>
         <button id="toggleHistoryBtn" class="mini-btn" onclick="toggleHistoryMode()">Show all</button>
       </div>
+
+      <div class="history-toolbar">
+        <div class="history-filters">
+          <button id="filterAll" class="mini-btn active" type="button" onclick="setHistoryFilter('all')">All</button>
+          <button id="filterSuccess" class="mini-btn" type="button" onclick="setHistoryFilter('success')">Success</button>
+          <button id="filterFailed" class="mini-btn" type="button" onclick="setHistoryFilter('failed')">Failed</button>
+          <button id="filterMakeup" class="mini-btn" type="button" onclick="setHistoryFilter('makeup')">Make-up</button>
+        </div>
+        <div class="export-row">
+          <button class="secondary-btn" type="button" onclick="exportDataJson()">Export JSON</button>
+          <button class="secondary-btn" type="button" onclick="exportDataCsv()">Export CSV</button>
+        </div>
+      </div>
+
       <div id="historyContainer">
         <p class="history-empty">Loading your records...</p>
       </div>
     </div>
+    </section>
 
-    <div class="summary-card">
+    <section id="panel-summary" class="app-panel">
+    <div class="summary-card" style="margin-top:0;">
       <div class="summary-toolbar">
         <h2 class="section-title" style="margin:0;">Progress summary</h2>
         <div class="summary-tabs">
@@ -675,6 +760,7 @@
 
       <div id="weeklyStrip" class="weekly-strip"></div>
     </div>
+    </section>
   </div>
 
   <script type="module">
@@ -718,6 +804,8 @@
     let showAllHistory = false;
     let summaryViewMode = "week";
     let summaryPeriodOffset = 0;
+    let historyFilter = "all";
+    let activeAppPage = "checkin";
     let currentStreak = 0;
     let bestStreak = 0;
     let lastCheckIn = null;
@@ -1000,25 +1088,181 @@
       }
     }
 
+    function getFilteredRecords() {
+      let rows = [...recentRecords].sort((a, b) => b.date.localeCompare(a.date));
+
+      if (historyFilter === "success") {
+        rows = rows.filter((record) => record.success);
+      } else if (historyFilter === "failed") {
+        rows = rows.filter((record) => !record.success);
+      } else if (historyFilter === "makeup") {
+        rows = rows.filter((record) => record.isMakeup);
+      }
+
+      return rows;
+    }
+
+    function updateHistoryFilterTabs() {
+      const map = {
+        all: "filterAll",
+        success: "filterSuccess",
+        failed: "filterFailed",
+        makeup: "filterMakeup"
+      };
+
+      Object.keys(map).forEach((key) => {
+        document.getElementById(map[key]).classList.toggle("active", historyFilter === key);
+      });
+    }
+
+    function setHistoryFilter(filter) {
+      historyFilter = filter;
+      updateHistoryFilterTabs();
+      renderHistoryList();
+    }
+
     function renderHistoryList() {
       const historyContainer = document.getElementById("historyContainer");
       const toggleBtn = document.getElementById("toggleHistoryBtn");
-      if (!recentRecords.length) {
-        historyContainer.innerHTML = "<p class=\"history-empty\">No history yet. Start with your first check-in today.</p>";
-        toggleBtn.textContent = "Show all";
+
+      if (!userId) {
+        historyContainer.innerHTML = "<p class=\"history-empty\">Sign in to view your history.</p>";
+        toggleBtn.disabled = true;
         return;
       }
 
-      const rows = showAllHistory ? recentRecords : recentRecords.slice(0, 14);
+      if (!recentRecords.length) {
+        historyContainer.innerHTML = "<p class=\"history-empty\">No history yet. Start with your first check-in today.</p>";
+        toggleBtn.textContent = "Show all";
+        toggleBtn.disabled = true;
+        return;
+      }
+
+      const filtered = getFilteredRecords();
+      if (!filtered.length) {
+        historyContainer.innerHTML = "<p class=\"history-empty\">No records match this filter.</p>";
+        toggleBtn.disabled = false;
+        toggleBtn.textContent = showAllHistory ? "Show recent" : "Show all";
+        return;
+      }
+
+      const rows = showAllHistory ? filtered : filtered.slice(0, 14);
       const items = rows.map((data) => formatHistoryRecord(data)).join("");
 
       historyContainer.innerHTML = "<ul class=\"history-list\">" + items + "</ul>";
       toggleBtn.textContent = showAllHistory ? "Show recent" : "Show all";
+      toggleBtn.disabled = false;
     }
 
     function toggleHistoryMode() {
       showAllHistory = !showAllHistory;
       renderHistoryList();
+    }
+
+    function downloadFile(filename, content, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeCsvValue(value) {
+      const text = String(value == null ? "" : value);
+      if (/[",\n]/.test(text)) {
+        return "\"" + text.replace(/"/g, "\"\"") + "\"";
+      }
+      return text;
+    }
+
+    function exportDataJson() {
+      if (!userId) {
+        alert("Please sign in first.");
+        return;
+      }
+
+      if (!recentRecords.length) {
+        alert("No records to export yet.");
+        return;
+      }
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        userId: userId,
+        currentStreak: currentStreak,
+        bestStreak: bestStreak,
+        lastCheckIn: lastCheckIn,
+        lastSuccessCheckIn: lastSuccessCheckIn,
+        checkins: [...recentRecords].sort((a, b) => a.date.localeCompare(b.date))
+      };
+
+      const filename = "discipline-checkins-" + getLocalDateString() + ".json";
+      downloadFile(filename, JSON.stringify(payload, null, 2), "application/json");
+    }
+
+    function exportDataCsv() {
+      if (!userId) {
+        alert("Please sign in first.");
+        return;
+      }
+
+      if (!recentRecords.length) {
+        alert("No records to export yet.");
+        return;
+      }
+
+      const headers = [
+        "date",
+        "success",
+        "isMakeup",
+        "work",
+        "noChinese",
+        "english",
+        "focusScore",
+        "distractionMinutes",
+        "reflectionNote",
+        "createdAt"
+      ];
+
+      const sorted = [...recentRecords].sort((a, b) => a.date.localeCompare(b.date));
+      const lines = [headers.join(",")];
+
+      sorted.forEach((record) => {
+        lines.push([
+          record.date,
+          record.success,
+          !!record.isMakeup,
+          !!record.work,
+          !!record.noChinese,
+          !!record.english,
+          record.focusScore,
+          record.distractionMinutes,
+          record.reflectionNote || "",
+          record.createdAt || ""
+        ].map(escapeCsvValue).join(","));
+      });
+
+      const filename = "discipline-checkins-" + getLocalDateString() + ".csv";
+      downloadFile(filename, lines.join("\n"), "text/csv");
+    }
+
+    function setAppPage(page) {
+      activeAppPage = page;
+      document.querySelectorAll(".app-panel").forEach((panel) => {
+        panel.classList.remove("active");
+      });
+      document.querySelectorAll(".app-menu-btn").forEach((button) => {
+        button.classList.remove("active");
+      });
+
+      document.getElementById("panel-" + page).classList.add("active");
+      document.getElementById("menu-" + page).classList.add("active");
+
+      if (page === "summary") {
+        renderPeriodSummary();
+      }
     }
 
     function escapeHtml(text) {
@@ -1602,10 +1846,15 @@
     window.toggleHistoryMode = toggleHistoryMode;
     window.setSummaryView = setSummaryView;
     window.shiftSummaryPeriod = shiftSummaryPeriod;
+    window.setHistoryFilter = setHistoryFilter;
+    window.exportDataJson = exportDataJson;
+    window.exportDataCsv = exportDataCsv;
+    window.setAppPage = setAppPage;
 
     setActionAvailability(false);
     setupMakeupDateInput();
     updateSummaryTabs();
+    updateHistoryFilterTabs();
     renderWeeklySummary();
     updateCountdown();
     setInterval(updateCountdown, 1000);
@@ -1625,6 +1874,8 @@
         userId = null;
         recentRecords = [];
         showAllHistory = false;
+        historyFilter = "all";
+        updateHistoryFilterTabs();
         currentStreak = 0;
         bestStreak = 0;
         lastCheckIn = null;
