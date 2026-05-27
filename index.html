@@ -571,6 +571,41 @@
       background: #eff6ff;
     }
 
+    .auth-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 13px;
+    }
+
+    .auth-bar p {
+      margin: 0;
+      color: #475569;
+      flex: 1;
+    }
+
+    .auth-bar-actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .auth-bar-actions a,
+    .auth-bar-actions button {
+      margin-top: 0;
+      width: auto;
+      padding: 8px 12px;
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-block;
+    }
+
     .app-menu-btn {
       border: 1px solid var(--line);
       background: var(--surface-soft);
@@ -728,15 +763,11 @@
 
     <p id="status" class="status">Loading Firebase...</p>
 
-    <div class="auth-card">
-      <p id="authInfo">Sign in status: loading...</p>
-      <input id="emailInput" class="auth-input" type="email" placeholder="Email (for multi-device sync)">
-      <input id="passwordInput" class="auth-input" type="password" placeholder="Password">
-      <p class="helper-text">Use one account on all devices to keep the same streak and history.</p>
-      <div class="auth-row">
-        <button class="secondary-btn" onclick="signUpWithEmail()">Sign up</button>
-        <button class="secondary-btn" onclick="signInWithEmail()">Sign in</button>
-        <button class="secondary-btn" onclick="signOutUser()">Sign out</button>
+    <div class="auth-bar">
+      <p id="authInfo">Checking sign-in...</p>
+      <div class="auth-bar-actions">
+        <a id="loginLink" class="secondary-btn" href="login.html?return=index.html">Sign in</a>
+        <button id="signOutBtn" class="secondary-btn" type="button" onclick="signOutUser()" style="display:none;">Sign out</button>
       </div>
     </div>
 
@@ -889,9 +920,7 @@
     import {
       getAuth,
       onAuthStateChanged,
-      signOut,
-      createUserWithEmailAndPassword,
-      signInWithEmailAndPassword
+      signOut
     } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
 
     import {
@@ -1119,13 +1148,19 @@
 
     function updateAuthUI(user) {
       const authInfo = document.getElementById("authInfo");
+      const loginLink = document.getElementById("loginLink");
+      const signOutBtn = document.getElementById("signOutBtn");
 
       if (!user) {
-        authInfo.textContent = "Sign in status: signed out";
+        authInfo.textContent = "Not signed in";
+        if (loginLink) loginLink.style.display = "inline-block";
+        if (signOutBtn) signOutBtn.style.display = "none";
         return;
       }
 
-      authInfo.textContent = "Sign in status: synced as " + (user.email || user.uid);
+      authInfo.textContent = user.email || "Signed in";
+      if (loginLink) loginLink.style.display = "none";
+      if (signOutBtn) signOutBtn.style.display = "inline-block";
     }
 
     async function saveUserData() {
@@ -1744,58 +1779,6 @@
       }
     }
 
-    function getEmailPasswordInput() {
-      const email = document.getElementById("emailInput").value.trim();
-      const password = document.getElementById("passwordInput").value;
-
-      if (!email || !password) {
-        alert("Please enter both email and password.");
-        return null;
-      }
-
-      if (password.length < 6) {
-        alert("Password must be at least 6 characters.");
-        return null;
-      }
-
-      return { email, password };
-    }
-
-    async function signUpWithEmail() {
-      const data = getEmailPasswordInput();
-      if (!data) {
-        return;
-      }
-
-      try {
-        if (auth.currentUser) {
-          alert("You are already signed in. Please sign out first if you want to create another account.");
-          return;
-        }
-
-        await createUserWithEmailAndPassword(auth, data.email, data.password);
-        alert("Account created and signed in.");
-      } catch (error) {
-        console.error("Email sign-up failed:", error);
-        alert("Sign-up failed: " + (error.code || "unknown-error"));
-      }
-    }
-
-    async function signInWithEmail() {
-      const data = getEmailPasswordInput();
-      if (!data) {
-        return;
-      }
-
-      try {
-        await signInWithEmailAndPassword(auth, data.email, data.password);
-        alert("Signed in successfully.");
-      } catch (error) {
-        console.error("Email sign-in failed:", error);
-        alert("Sign-in failed: " + (error.code || "unknown-error"));
-      }
-    }
-
     async function checkIn() {
       if (!userId) {
         alert("Please sign in first.");
@@ -1970,8 +1953,6 @@
     window.makeupFail = makeupFail;
     window.resetProgress = resetProgress;
     window.signOutUser = signOutUser;
-    window.signUpWithEmail = signUpWithEmail;
-    window.signInWithEmail = signInWithEmail;
     window.toggleHistoryMode = toggleHistoryMode;
     window.setSummaryView = setSummaryView;
     window.shiftSummaryPeriod = shiftSummaryPeriod;
@@ -2017,7 +1998,7 @@
           document.getElementById("toggleHistoryBtn").disabled = true;
           document.getElementById("toggleHistoryBtn").textContent = "Show all";
           document.getElementById("status").textContent =
-            "Please sign in with email and password.";
+            "Please sign in to use check-in features.";
           renderWeeklySummary();
         }
       } catch (error) {

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sign in | Discipline Compass</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7fb;
+      color: #0f172a;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 340px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 20px 18px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; text-align: center; }
+    .subtitle { margin: 0 0 14px; text-align: center; color: #64748b; font-size: 13px; }
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-bottom: 12px;
+      color: #2563eb;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    label { display: block; font-size: 12px; color: #475569; margin: 10px 0 4px; }
+    input {
+      width: 100%;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      padding: 11px;
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .primary-btn { background: #2563eb; color: #fff; }
+    .secondary-btn { background: #f8fafc; color: #0f172a; border: 1px solid #e2e8f0; }
+    #status {
+      margin-top: 10px;
+      font-size: 12px;
+      text-align: center;
+      color: #64748b;
+      min-height: 18px;
+    }
+    #status.error { color: #b91c1c; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <a id="backLink" class="back-link" href="index.html">← Back</a>
+    <h1>Sign in</h1>
+    <p class="subtitle">Use one account on all devices</p>
+
+    <label for="emailInput">Email</label>
+    <input id="emailInput" type="email" autocomplete="username" placeholder="you@email.com">
+
+    <label for="passwordInput">Password</label>
+    <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Password">
+
+    <button class="primary-btn" type="button" onclick="signInWithEmail()">Sign in</button>
+    <button class="secondary-btn" type="button" onclick="signUpWithEmail()">Create account</button>
+
+    <p id="status"></p>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword
+    } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA-Edt2MC8yZiHI_WRQKte5VEncEUIP1L4",
+      authDomain: "daily-check-in-86968.firebaseapp.com",
+      projectId: "daily-check-in-86968",
+      storageBucket: "daily-check-in-86968.firebasestorage.app",
+      messagingSenderId: "1063521708690",
+      appId: "1:1063521708690:web:1bad506bb31982d0a2d44b",
+      measurementId: "G-55SNKVD5B7"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const params = new URLSearchParams(window.location.search);
+    const allowedReturns = ["index.html", "plan.html"];
+    const returnTo = allowedReturns.includes(params.get("return")) ? params.get("return") : "index.html";
+
+    document.getElementById("backLink").href = returnTo;
+
+    function setStatus(message, isError) {
+      const status = document.getElementById("status");
+      status.textContent = message;
+      status.classList.toggle("error", !!isError);
+    }
+
+    function getCredentials() {
+      const email = document.getElementById("emailInput").value.trim();
+      const password = document.getElementById("passwordInput").value;
+      if (!email || !password) {
+        setStatus("Enter email and password.", true);
+        return null;
+      }
+      if (password.length < 6) {
+        setStatus("Password must be at least 6 characters.", true);
+        return null;
+      }
+      return { email, password };
+    }
+
+    function goBack() {
+      window.location.href = returnTo;
+    }
+
+    async function signInWithEmail() {
+      const data = getCredentials();
+      if (!data) return;
+      try {
+        setStatus("Signing in...");
+        await signInWithEmailAndPassword(auth, data.email, data.password);
+        goBack();
+      } catch (error) {
+        setStatus(error.message || "Sign in failed.", true);
+      }
+    }
+
+    async function signUpWithEmail() {
+      const data = getCredentials();
+      if (!data) return;
+      try {
+        setStatus("Creating account...");
+        await createUserWithEmailAndPassword(auth, data.email, data.password);
+        goBack();
+      } catch (error) {
+        setStatus(error.message || "Sign up failed.", true);
+      }
+    }
+
+    window.signInWithEmail = signInWithEmail;
+    window.signUpWithEmail = signUpWithEmail;
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        goBack();
+      }
+    });
+  </script>
+</body>
+</html>
