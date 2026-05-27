@@ -545,9 +545,16 @@
 
     .app-menu {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 8px;
       margin-bottom: 16px;
+    }
+
+    @media (max-width: 520px) {
+      .app-menu-btn {
+        font-size: 12px;
+        padding: 10px 6px;
+      }
     }
 
     .app-menu-btn {
@@ -710,6 +717,7 @@
 
     <nav class="app-menu" aria-label="Main sections">
       <button id="menu-checkin" class="app-menu-btn active" type="button" onclick="setAppPage('checkin')">Check-in</button>
+      <button id="menu-plan" class="app-menu-btn" type="button" onclick="setAppPage('plan')">Plan</button>
       <button id="menu-history" class="app-menu-btn" type="button" onclick="setAppPage('history')">History</button>
       <button id="menu-summary" class="app-menu-btn" type="button" onclick="setAppPage('summary')">Summary</button>
     </nav>
@@ -719,15 +727,6 @@
       <p id="lastCheckIn">Last check-in: none</p>
       <p id="disciplineDayInfo">Today's check-in date: loading...</p>
       <p id="countdown">Time left before streak reset: loading...</p>
-    </div>
-
-    <div class="review-card" id="todayPlanCard">
-      <h2 class="section-title">Today's plan</h2>
-      <p class="helper-text">Important tasks stay on top. Shuffle randomizes the rest.</p>
-      <ul id="todayPlanList" class="plan-list"></ul>
-      <div class="plan-actions">
-        <button class="secondary-btn" type="button" onclick="shuffleTodayPlan()">Shuffle order</button>
-      </div>
     </div>
 
     <div class="checklist">
@@ -769,8 +768,33 @@
     <button class="secondary-btn" onclick="recordFailToday()">Record failed day + self-check (today)</button>
 
     <div class="review-card">
+      <h2 class="section-title">Make-up check-in</h2>
+      <p class="helper-text">Forgot a past day? Pick the date, fill self-check below, then submit. Make-up success needs all rules + self-check. Make-up fail needs self-check only.</p>
+      <input id="makeupDate" class="auth-input" type="date">
+      <div class="auth-row">
+        <button class="secondary-btn" onclick="makeupSuccess()">Make-up success (rules + self-check)</button>
+        <button class="secondary-btn" onclick="makeupFail()">Make-up fail (self-check)</button>
+      </div>
+    </div>
+
+    <button class="danger-btn" onclick="resetProgress()">Reset / Fresh Start</button>
+
+    <p class="footer-note">Each calendar day ends at midnight. Streak counts only consecutive success days.</p>
+    </section>
+
+    <section id="panel-plan" class="app-panel">
+    <div class="review-card" id="todayPlanCard" style="margin-top:0;">
+      <h2 class="section-title">Today's plan</h2>
+      <p class="helper-text">Important tasks stay on top. Shuffle randomizes the rest.</p>
+      <ul id="todayPlanList" class="plan-list"></ul>
+      <div class="plan-actions">
+        <button class="secondary-btn" type="button" onclick="shuffleTodayPlan()">Shuffle order</button>
+      </div>
+    </div>
+
+    <div class="review-card">
       <h2 class="section-title">Plan for tomorrow</h2>
-      <p class="helper-text">Add tasks tonight. Tomorrow they appear at the top of Check-in. Mark important to keep first after shuffle.</p>
+      <p class="helper-text">Add tasks tonight. Tomorrow they appear in Today's plan. Mark important to keep first after shuffle.</p>
       <div class="plan-add-row">
         <input id="tomorrowPlanText" class="auth-input" type="text" placeholder="Task for tomorrow">
         <label class="plan-important-label">
@@ -784,20 +808,6 @@
         <button class="secondary-btn" type="button" onclick="shuffleTomorrowPlan()">Shuffle order</button>
       </div>
     </div>
-
-    <div class="review-card">
-      <h2 class="section-title">Make-up check-in</h2>
-      <p class="helper-text">Forgot a past day? Pick the date, fill self-check below, then submit. Make-up success needs all rules + self-check. Make-up fail needs self-check only.</p>
-      <input id="makeupDate" class="auth-input" type="date">
-      <div class="auth-row">
-        <button class="secondary-btn" onclick="makeupSuccess()">Make-up success (rules + self-check)</button>
-        <button class="secondary-btn" onclick="makeupFail()">Make-up fail (self-check)</button>
-      </div>
-    </div>
-
-    <button class="danger-btn" onclick="resetProgress()">Reset / Fresh Start</button>
-
-    <p class="footer-note">Each calendar day ends at midnight. Streak counts only consecutive success days.</p>
     </section>
 
     <section id="panel-history" class="app-panel">
@@ -1554,6 +1564,10 @@
 
       if (page === "summary") {
         renderPeriodSummary();
+      }
+
+      if (page === "plan") {
+        renderPlanSections();
       }
     }
 
