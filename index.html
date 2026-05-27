@@ -549,7 +549,6 @@
     <div class="summary-card">
       <p id="weeklySummary">Weekly summary: sign in to view your progress.</p>
       <div id="weeklyStrip" class="weekly-strip"></div>
-      <p id="coachMessage">Coach note: consistency beats intensity.</p>
     </div>
   </div>
 
@@ -949,12 +948,10 @@
     function renderWeeklySummary() {
       const weeklySummary = document.getElementById("weeklySummary");
       const weeklyStrip = document.getElementById("weeklyStrip");
-      const coachMessage = document.getElementById("coachMessage");
 
       if (!userId) {
         weeklySummary.textContent = "Weekly summary: sign in to view your progress.";
         weeklyStrip.innerHTML = "";
-        coachMessage.textContent = "Coach note: sign in and start your first focused day.";
         return;
       }
 
@@ -993,14 +990,6 @@
       const rate = Math.round((successCount / 7) * 100);
       const avgFocus = focusCount ? (focusSum / focusCount).toFixed(1) : "n/a";
       weeklySummary.textContent = "Weekly summary: " + successCount + "/7 successful days (" + rate + "%), avg focus " + avgFocus + ".";
-
-      if (successCount >= 6) {
-        coachMessage.textContent = "Coach note: excellent consistency - keep your routine stable.";
-      } else if (successCount >= 4) {
-        coachMessage.textContent = "Coach note: good momentum - protect your most focused hours.";
-      } else {
-        coachMessage.textContent = "Coach note: reset small - win tomorrow with one clear start time.";
-      }
     }
 
     function updateDisciplineDayInfo(now = new Date()) {
